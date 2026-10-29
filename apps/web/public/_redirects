@@ -1,0 +1,4 @@
+# Serve the single-page app for every path that is not a real file.
+# Netlify and Cloudflare Pages read this file from the build output.
+# The static files in /assets, /brand and /fonts take precedence over the rule.
+/*    /index.html   200

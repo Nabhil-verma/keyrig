@@ -1,0 +1,2 @@
+# Stage the build here before a deploy. It is build output, not source.
+public/

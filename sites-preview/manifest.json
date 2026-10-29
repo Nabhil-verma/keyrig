@@ -1,0 +1,12 @@
+{
+  "entrypoint": "worker.mjs",
+  "compatibilityDate": "2025-04-01",
+  "modules": [
+    {
+      "name": "worker.mjs",
+      "type": "esm",
+      "path": "./worker.mjs"
+    }
+  ],
+  "assetsDirectory": "./public"
+}
