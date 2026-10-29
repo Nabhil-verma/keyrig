@@ -2,9 +2,14 @@ node_modules/
 dist/
 coverage/
 .vite/
+test-results/
+playwright-report/
 *.local
 .env
 .env.*
 !.env.example
 .models-probe.json
 .DS_Store
+sites-preview/public/
+.freebuff/*
+!.freebuff/run.md

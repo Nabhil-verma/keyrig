@@ -1,7 +1,8 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Link, useRoute, type Route } from "./router";
-import { applyTheme, readTheme, type Theme } from "./theme";
+import { useSettings, writeSettings } from "./settings";
+import type { Theme } from "./theme";
 import { BrandLockup } from "./ui/BrandLockup";
 import { BrandMark } from "./ui/BrandMark";
 import { Icon } from "./ui/Icon";
@@ -9,6 +10,7 @@ import { Icon } from "./ui/Icon";
 const PUBLIC_LINKS: ReadonlyArray<{ to: Route; label: string }> = [
   { to: "/providers", label: "Providers" },
   { to: "/security", label: "Security" },
+  { to: "/settings", label: "Settings" },
 ];
 
 function PublicNav({ route }: { route: Route }) {
@@ -42,11 +44,11 @@ interface SiteHeaderProps {
 
 export function SiteHeader({ nav, actions }: SiteHeaderProps) {
   const route = useRoute();
-  const [theme, setTheme] = useState<Theme>(() => readTheme());
-
-  useEffect(() => {
-    applyTheme(theme);
-  }, [theme]);
+  const settings = useSettings();
+  const prefersLight =
+    typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: light)").matches;
+  const theme: Theme =
+    settings.theme === "system" ? (prefersLight ? "light" : "dark") : settings.theme;
 
   const themeButton = (
     <button
@@ -54,7 +56,7 @@ export function SiteHeader({ nav, actions }: SiteHeaderProps) {
       className="icon-button"
       aria-label={theme === "dark" ? "Switch to the light theme" : "Switch to the dark theme"}
       title={theme === "dark" ? "Light theme" : "Dark theme"}
-      onClick={() => setTheme((value) => (value === "dark" ? "light" : "dark"))}
+      onClick={() => writeSettings({ theme: theme === "dark" ? "light" : "dark" })}
     >
       <Icon name={theme === "dark" ? "sun" : "moon"} size={16} />
     </button>
@@ -94,6 +96,7 @@ export function SiteFooter() {
       <span className="footer-links">
         <Link to="/providers">Providers</Link>
         <Link to="/security">Security</Link>
+        <Link to="/settings">Settings</Link>
         <Link to="/app">App</Link>
       </span>
       <span>No server · Zero telemetry · MIT</span>

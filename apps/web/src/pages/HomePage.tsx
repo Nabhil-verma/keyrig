@@ -13,7 +13,7 @@ import {
 import { BUILTIN_MANIFESTS } from "@keyrig/providers";
 import { SiteFooter, SiteHeader } from "../SiteChrome";
 import { Link } from "../router";
-import { fadeUp, stagger } from "../motion";
+import { EASE_OUT, fadeUp, stagger } from "../motion";
 import { BrandMark } from "../ui/BrandMark";
 import { Icon, type IconName } from "../ui/Icon";
 
@@ -161,7 +161,7 @@ function Hero() {
 }
 
 const HUB = { x: 110, y: 150 };
-const NODE_X = 330;
+const NODE_X = 300;
 const NODE_Y = [50, 150, 250];
 
 /** The routing visual: one hub, three provider nodes, animated packets and a cycling example answer. */
@@ -183,62 +183,64 @@ function RoutingVisual() {
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.9, delay: 0.3, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
     >
-      <svg className="routing-svg" viewBox="0 0 480 300" aria-hidden="true">
-        <defs>
-          <filter id="packet-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="3" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        {paths.map((d, index) => (
-          <motion.path
-            key={d}
-            d={d}
-            className={index === active ? "route-line route-line--active" : "route-line"}
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 1.4, delay: 0.5 + index * 0.15, ease: "easeInOut" }}
+      <div className="routing-diagram">
+        <svg className="routing-svg" viewBox="0 0 480 300" aria-hidden="true">
+          <defs>
+            <filter id="packet-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          {paths.map((d, index) => (
+            <motion.path
+              key={d}
+              d={d}
+              className={index === active ? "route-line route-line--active" : "route-line"}
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 1.4, delay: 0.5 + index * 0.15, ease: "easeInOut" }}
+            />
+          ))}
+          {paths.map((d, index) => (
+            <circle key={`packet-${d}`} r="4" className="packet" filter="url(#packet-glow)">
+              <animateMotion dur="2.6s" begin={`${index * 0.85}s`} repeatCount="indefinite" path={d} />
+            </circle>
+          ))}
+        </svg>
+
+        <div className="hub" style={{ left: `${(HUB.x / 480) * 100}%`, top: `${(HUB.y / 300) * 100}%` }}>
+          <motion.span
+            className="hub-ring"
+            aria-hidden="true"
+            animate={{ scale: [1, 1.35, 1], opacity: [0.5, 0, 0.5] }}
+            transition={{ duration: 2.6, repeat: Infinity, ease: "easeOut" }}
           />
-        ))}
-        {paths.map((d, index) => (
-          <circle key={`packet-${d}`} r="4" className="packet" filter="url(#packet-glow)">
-            <animateMotion dur="2.6s" begin={`${index * 0.85}s`} repeatCount="indefinite" path={d} />
-          </circle>
-        ))}
-      </svg>
+          <span className="hub-core">
+            <BrandMark size={52} />
+          </span>
+        </div>
 
-      <div className="hub" style={{ left: `${(HUB.x / 480) * 100}%`, top: `${(HUB.y / 300) * 100}%` }}>
-        <motion.span
-          className="hub-ring"
-          aria-hidden="true"
-          animate={{ scale: [1, 1.35, 1], opacity: [0.5, 0, 0.5] }}
-          transition={{ duration: 2.6, repeat: Infinity, ease: "easeOut" }}
-        />
-        <span className="hub-core">
-          <BrandMark size={52} />
-        </span>
+        {EXAMPLES.map((item, index) => {
+          const nodeY = NODE_Y[index] ?? 0;
+          return (
+            <motion.div
+              key={item.provider}
+              className="route-node"
+              data-active={index === active}
+              style={{ left: `${(NODE_X / 480) * 100}%`, top: `${(nodeY / 300) * 100}%` }}
+              animate={{ y: [0, -5, 0] }}
+              transition={{ duration: 4 + index, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <span className="route-node-dot" />
+              <span className="route-node-name">{item.provider}</span>
+              <span className="route-node-model mono">{item.model}</span>
+            </motion.div>
+          );
+        })}
       </div>
-
-      {EXAMPLES.map((item, index) => {
-        const nodeY = NODE_Y[index] ?? 0;
-        return (
-          <motion.div
-            key={item.provider}
-            className="route-node"
-            data-active={index === active}
-            style={{ left: `${(NODE_X / 480) * 100}%`, top: `${(nodeY / 300) * 100}%` }}
-            animate={{ y: [0, -5, 0] }}
-            transition={{ duration: 4 + index, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <span className="route-node-dot" />
-            <span className="route-node-name">{item.provider}</span>
-            <span className="route-node-model mono">{item.model}</span>
-          </motion.div>
-        );
-      })}
 
       <div className="answer-card" aria-live="polite">
         <div className="answer-head">
@@ -333,7 +335,7 @@ const FEATURES: FeatureSpec[] = [
   },
   { icon: "route", title: "Route per prompt", text: "Pick a provider and a model for each prompt. Change them at any time." },
   { icon: "arena", title: "Model arena", text: "Send one prompt to many models. Compare time, cost and answer side by side." },
-  { icon: "wallet", title: "Cost in view", text: "Each answer shows input tokens, output tokens and an estimated cost." },
+  { icon: "wallet", title: "Cost in view", text: "Each answer shows input tokens, output tokens and an estimated cost.", wide: true },
   { icon: "check", title: "Provenance on every reply", text: "The model, the key label and the token count stay with each answer.", wide: true },
   { icon: "cpu", title: "Local models too", text: "Connect Ollama, LM Studio or any OpenAI-compatible server on your machine." },
 ];
@@ -379,10 +381,178 @@ const STEPS = [
   { num: "04", title: "Send a prompt", text: "Read the answer with its model, key label and estimated cost." },
 ];
 
+/** The preview of the active step. The content matches the step on the left. */
+function StepFigure({ active }: { active: number }) {
+  const step = STEPS[active] ?? STEPS[STEPS.length - 1]!;
+
+  return (
+    <aside className="how-figure" aria-label={`Step ${step.num}: ${step.title}`}>
+      <div className="figure-head">
+        <span className="eyebrow eyebrow--cyan">
+          <Icon name="route" size={11} />
+          Step {step.num}
+        </span>
+        <span className="chip chip--plain">{step.title}</span>
+      </div>
+
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={step.num}
+          className="figure-body"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.3, ease: EASE_OUT }}
+        >
+          {active === 0 ? (
+            <div className="figure-stack">
+              <div className="figure-row">
+                <span className="figure-avatar">A</span>
+                <div className="figure-text">
+                  <strong>alice</strong>
+                  <span className="mono">account on this device</span>
+                </div>
+                <span className="chip chip--plain">Owner</span>
+              </div>
+              <div className="figure-panel">
+                <span className="figure-glyph">
+                  <Icon name="lock" size={15} />
+                </span>
+                <div className="figure-text">
+                  <strong>Vault locked</strong>
+                  <p>Your password opens it. keyrig never stores the password.</p>
+                </div>
+              </div>
+              <p className="figure-note mono">AES-GCM · PBKDF2 · this browser only</p>
+            </div>
+          ) : null}
+
+          {active === 1 ? (
+            <div className="figure-stack">
+              <div className="figure-panel">
+                <span className="figure-glyph figure-glyph--amber">
+                  <Icon name="key" size={15} />
+                </span>
+                <div className="figure-text">
+                  <strong>work</strong>
+                  <span className="mono">•••••••• 4F2A</span>
+                </div>
+                <span className="chip chip--amber">encrypted</span>
+              </div>
+              <div className="figure-row">
+                <span className="mono figure-note">openai</span>
+                <span className="chip chip--plain">API key</span>
+              </div>
+              <p className="figure-note mono">The key goes only to api.openai.com.</p>
+            </div>
+          ) : null}
+
+          {active === 2 ? (
+            <div className="figure-stack">
+              <ul className="figure-models">
+                <li data-active="true">
+                  <span>OpenAI</span>
+                  <span className="mono">gpt-5.4</span>
+                </li>
+                <li>
+                  <span>Anthropic</span>
+                  <span className="mono">claude-sonnet-4-5</span>
+                </li>
+                <li>
+                  <span>Ollama</span>
+                  <span className="mono">llama3.2</span>
+                </li>
+              </ul>
+              <p className="figure-note mono">One provider and one model for each prompt.</p>
+            </div>
+          ) : null}
+
+          {active === 3 ? (
+            <div className="figure-stack">
+              <p className="figure-prompt">Compare these two drafts.</p>
+              <div className="figure-panel figure-panel--answer">
+                <p className="figure-answer">The second draft is shorter and keeps the same point.</p>
+                <div className="figure-chips">
+                  <span className="chip chip--cyan">
+                    <Icon name="cpu" size={10} />
+                    gpt-5.4
+                  </span>
+                  <span className="chip">
+                    <Icon name="key" size={10} />
+                    work
+                  </span>
+                  <span className="chip">812 in · 240 out</span>
+                  <span className="chip">$0.0021 estimated</span>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </motion.div>
+      </AnimatePresence>
+
+      <div className="figure-foot">
+        <span className="figure-dots" aria-hidden="true">
+          {STEPS.map((item, index) => (
+            <span key={item.num} className="figure-dot" data-active={index === active} />
+          ))}
+        </span>
+        <span>Example data</span>
+      </div>
+    </aside>
+  );
+}
+
 function Steps() {
   const ref = useRef<HTMLDivElement | null>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start 75%", "end 55%"] });
   const scaleY = useSpring(scrollYProgress, { stiffness: 120, damping: 28 });
+  const [active, setActive] = useState(0);
+  const stepRefs = useRef<Array<HTMLLIElement | null>>([]);
+
+  // While the list is on screen, the step nearest the middle of the screen sets
+  // the figure. A pointer over a step takes over until the next scroll.
+  useEffect(() => {
+    let frame = 0;
+    const pick = (): void => {
+      frame = 0;
+      const list = ref.current?.getBoundingClientRect();
+      if (!list || list.bottom < 0 || list.top > window.innerHeight) {
+        return;
+      }
+      const middle = window.innerHeight / 2;
+      let nearest = -1;
+      let nearestGap = Infinity;
+      stepRefs.current.forEach((node, index) => {
+        if (!node) {
+          return;
+        }
+        const rect = node.getBoundingClientRect();
+        const gap = Math.abs(rect.top + rect.height / 2 - middle);
+        if (gap < nearestGap) {
+          nearestGap = gap;
+          nearest = index;
+        }
+      });
+      if (nearest >= 0) {
+        setActive(nearest);
+      }
+    };
+    const onScroll = (): void => {
+      if (frame === 0) {
+        frame = requestAnimationFrame(pick);
+      }
+    };
+    pick();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame !== 0) {
+        cancelAnimationFrame(frame);
+      }
+    };
+  }, []);
 
   return (
     <section className="section" id="how">
@@ -390,21 +560,39 @@ function Steps() {
         <span className="eyebrow eyebrow--amber">How it works</span>
         <h2>From an empty device to a routed answer.</h2>
       </motion.div>
-      <div className="timeline" ref={ref}>
-        <span className="timeline-track" aria-hidden="true">
-          <motion.span className="timeline-fill" style={{ scaleY }} />
-        </span>
-        <ol className="timeline-list">
-          {STEPS.map((step) => (
-            <motion.li key={step.num} className="timeline-step" variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true, margin: "-60px" }}>
-              <span className="step-num">{step.num}</span>
-              <div>
-                <h3>{step.title}</h3>
-                <p>{step.text}</p>
-              </div>
-            </motion.li>
-          ))}
-        </ol>
+      <div className="how-grid">
+        <div className="how-main">
+          <div className="timeline" ref={ref}>
+            <span className="timeline-track" aria-hidden="true">
+              <motion.span className="timeline-fill" style={{ scaleY }} />
+            </span>
+            <ol className="timeline-list">
+              {STEPS.map((step, index) => (
+                <motion.li
+                  key={step.num}
+                  className="timeline-step"
+                  data-active={index === active}
+                  ref={(node) => {
+                    stepRefs.current[index] = node;
+                  }}
+                  data-index={index}
+                  onPointerEnter={() => setActive(index)}
+                  variants={fadeUp}
+                  initial="hidden"
+                  whileInView="show"
+                  viewport={{ once: true, margin: "-60px" }}
+                >
+                  <span className="step-num">{step.num}</span>
+                  <div>
+                    <h3>{step.title}</h3>
+                    <p>{step.text}</p>
+                  </div>
+                </motion.li>
+              ))}
+            </ol>
+          </div>
+        </div>
+        <StepFigure active={active} />
       </div>
     </section>
   );

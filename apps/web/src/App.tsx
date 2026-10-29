@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyView, SignedInAccount } from "@keyrig/core";
-import { createUsageBus, sendChat, signIn, signUp } from "@keyrig/core";
+import type { AccountRecord, KeyView, RoleAssignment, RoleId, SignedInAccount } from "@keyrig/core";
+import {
+  ROLE_LABELS,
+  assignRole,
+  can,
+  createUsageBus,
+  ensureAccountRole,
+  listAccounts,
+  loadProviderModels,
+  readAssignments,
+  sendChat,
+  signIn,
+  signUp,
+} from "@keyrig/core";
 import {
   BUILTIN_MANIFESTS,
   checkBaseUrl,
@@ -20,6 +32,9 @@ import { AuthPanel } from "./AuthPanel";
 import { ChatPanel } from "./ChatPanel";
 import { KeyPanel } from "./KeyPanel";
 import { ProfilePanel } from "./ProfilePanel";
+import { RolesPanel } from "./RolesPanel";
+import { readRoute, writeRoute } from "./routeStore";
+import { useSettings } from "./settings";
 import { browserStorage } from "./storage";
 import { motion } from "framer-motion";
 import { SiteFooter, SiteHeader } from "./SiteChrome";
@@ -44,6 +59,13 @@ function toChatMessages(messages: UIMessage[]): ChatMessage[] {
 }
 
 export default function App() {
+  const settings = useSettings();
+  /** A disabled provider pack leaves the key and route pickers. */
+  const enabledManifests = useMemo(() => {
+    const enabled = BUILTIN_MANIFESTS.filter((item) => !settings.disabledProviders.includes(item.id));
+    return enabled.length > 0 ? enabled : BUILTIN_MANIFESTS;
+  }, [settings.disabledProviders]);
+
   const [session, setSession] = useState<SignedInAccount | null>(null);
   const [keys, setKeys] = useState<KeyView[]>([]);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
@@ -57,6 +79,14 @@ export default function App() {
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [totalCost, setTotalCost] = useState(0);
+  const [role, setRole] = useState<RoleId | null>(null);
+  const [accounts, setAccounts] = useState<AccountRecord[]>([]);
+  const [assignments, setAssignments] = useState<RoleAssignment[]>([]);
+  const [roleError, setRoleError] = useState<string | null>(null);
+  const [providerModels, setProviderModels] = useState<string[]>([]);
+  const [modelsBusy, setModelsBusy] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [modelsNonce, setModelsNonce] = useState(0);
 
   const bus = useMemo(() => createUsageBus(), []);
   const abortRef = useRef<AbortController | null>(null);
@@ -79,7 +109,7 @@ export default function App() {
     };
   }, [bus]);
 
-  const manifest = (getManifest(BUILTIN_MANIFESTS, providerId) ?? BUILTIN_MANIFESTS[0]) as ProviderManifest;
+  const manifest = (getManifest(enabledManifests, providerId) ?? enabledManifests[0]) as ProviderManifest;
   const models = useMemo(() => (catalog ? modelsForProvider(catalog, providerId) : []), [catalog, providerId]);
   const catalogModel = useMemo(
     () => (catalog ? findModel(catalog, providerId, modelId) : undefined),
@@ -96,14 +126,96 @@ export default function App() {
     }
   }, [keys, providerId, keyId]);
 
+  /** A plugin can be disabled while its provider is selected. Move to the first pack. */
+  useEffect(() => {
+    if (enabledManifests.some((item) => item.id === providerId)) {
+      return;
+    }
+    const first = enabledManifests[0];
+    if (first === undefined) {
+      return;
+    }
+    setProviderId(first.id);
+    setModelId(first.defaultModel ?? "");
+    setBaseUrl(first.supportsCustomBaseUrl ? first.baseUrl : "");
+    setProviderModels([]);
+    setModelsError(null);
+  }, [enabledManifests, providerId]);
+
   const baseUrlCheck =
     manifest.supportsCustomBaseUrl && baseUrl.trim().length > 0 ? checkBaseUrl(baseUrl.trim()) : null;
   const customBaseBlocked = baseUrlCheck !== null && !baseUrlCheck.allowed;
   const effectiveBaseUrl = manifest.supportsCustomBaseUrl && baseUrl.trim().length > 0 ? baseUrl.trim() : undefined;
 
+  /**
+   * PV-11: read the model list when the manifest allows one. The picker shows
+   * the list after this request. A provider that does not list its models
+   * keeps the typed model name.
+   */
+  useEffect(() => {
+    if (session === null || !can(role, "route.manage") || !manifest.abilities.modelList) {
+      setProviderModels([]);
+      setModelsBusy(false);
+      setModelsError(null);
+      return;
+    }
+    if (manifest.authType === "api-key" && providerKeys.length === 0) {
+      setProviderModels([]);
+      setModelsBusy(false);
+      setModelsError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    setProviderModels([]);
+    setModelsBusy(true);
+    setModelsError(null);
+
+    // Wait for a short pause. Each keystroke in the base URL must not start a request.
+    const timer = setTimeout(() => {
+      void loadProviderModels({
+        vault: session.vault,
+        manifest,
+        ...(keyId.length > 0 ? { keyId } : {}),
+        ...(effectiveBaseUrl !== undefined ? { baseUrl: effectiveBaseUrl } : {}),
+        signal: controller.signal,
+      })
+        .then((result) => {
+          if (!active) {
+            return;
+          }
+          setProviderModels(result.models);
+          setModelsError(
+            result.models.length === 0 ? "The provider sent no model names. Type the model name." : null,
+          );
+        })
+        .catch((caught: unknown) => {
+          if (!active) {
+            return;
+          }
+          setProviderModels([]);
+          setModelsError(safeError(caught).message);
+        })
+        .finally(() => {
+          if (active) {
+            setModelsBusy(false);
+          }
+        });
+    }, 300);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [session, manifest, keyId, effectiveBaseUrl, providerKeys.length, role, modelsNonce]);
+
   const blockReason = !session
     ? "Sign in to start."
-    : providerKeys.length === 0
+    : !can(role, "chat.send")
+      ? "Your role cannot send prompts. Ask an owner to change your role."
+      : providerKeys.length === 0
       ? `Add a key for ${manifest.displayName}.`
       : modelId.trim().length === 0
         ? "Choose a model."
@@ -113,6 +225,7 @@ export default function App() {
 
   const canSend =
     session !== null &&
+    can(role, "chat.send") &&
     providerKeys.length > 0 &&
     keyId.length > 0 &&
     modelId.trim().length > 0 &&
@@ -178,6 +291,8 @@ export default function App() {
       } finally {
         setStreaming(false);
         abortRef.current = null;
+        // KS-05: the vault writes the last-used date. Read it back for the key card.
+        setKeys(session.vault.listKeys());
       }
     },
     [session, selectedKey, manifest, modelId, pricing, effectiveBaseUrl, bus, providerId],
@@ -230,6 +345,8 @@ export default function App() {
       return;
     }
     if (action === "check_key" || action === "check_settings") {
+      // The rail is its own scroll container. Scroll it to the key vault panel.
+      keysRef.current?.scrollTo({ top: 0, behavior: "smooth" });
       keysRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
@@ -313,19 +430,60 @@ export default function App() {
   };
 
   const changeProvider = (next: string): void => {
-    const nextManifest = getManifest(BUILTIN_MANIFESTS, next);
+    const nextManifest = getManifest(enabledManifests, next);
     setProviderId(next);
     setModelId(nextManifest?.defaultModel ?? "");
     setBaseUrl(nextManifest?.supportsCustomBaseUrl ? nextManifest.baseUrl : "");
+    setProviderModels([]);
+    setModelsError(null);
+  };
+
+  /** PV-11: read the model list again with the selected key. */
+  const reloadModels = (): void => {
+    setModelsNonce((value) => value + 1);
   };
 
   const enterSession = (account: SignedInAccount): void => {
+    const deviceKeys = account.vault.listKeys();
+    const saved = readRoute(storage, account.username);
+    const savedManifest = saved ? getManifest(enabledManifests, saved.providerId) : undefined;
+    const savedKey = saved ? deviceKeys.find((key) => key.id === saved.keyId) : undefined;
+    const firstManifest = enabledManifests[0];
+
     setSession(account);
-    setKeys(account.vault.listKeys());
+    setKeys(deviceKeys);
+    setRole(ensureAccountRole({ storage }, account.username));
+    setAccounts(listAccounts(storage));
+    setAssignments(readAssignments({ storage }));
+    setRoleError(null);
     setMessages([]);
     setTotalCost(0);
     setTab("chat");
+    setProviderModels([]);
+    setModelsError(null);
+
+    // A new chat opens with the route that the account used last.
+    if (saved !== null && savedManifest !== undefined && savedKey !== undefined) {
+      setProviderId(savedManifest.id);
+      setModelId(saved.modelId);
+      setKeyId(savedKey.id);
+      setBaseUrl(savedManifest.supportsCustomBaseUrl ? saved.baseUrl : "");
+      return;
+    }
+
+    setProviderId(firstManifest?.id ?? "openai");
+    setModelId(firstManifest?.defaultModel ?? "");
+    setKeyId(deviceKeys.find((key) => key.providerId === firstManifest?.id)?.id ?? "");
+    setBaseUrl(firstManifest?.supportsCustomBaseUrl ? firstManifest.baseUrl : "");
   };
+
+  /** Keep the route for this account. The write is best effort. */
+  useEffect(() => {
+    if (session === null || !settings.rememberRoute) {
+      return;
+    }
+    writeRoute(storage, session.username, { providerId, modelId, keyId, baseUrl });
+  }, [session, providerId, modelId, keyId, baseUrl, settings.rememberRoute]);
 
   const handleSignUp = async (username: string, password: string): Promise<void> => {
     enterSession(await signUp({ storage, username, password }));
@@ -345,9 +503,28 @@ export default function App() {
     session?.vault.lock();
     setSession(null);
     setKeys([]);
+    setProviderModels([]);
+    setModelsError(null);
+    setRole(null);
+    setAccounts([]);
+    setAssignments([]);
+    setRoleError(null);
     setMessages([]);
     setTotalCost(0);
     setKeyId("");
+  };
+
+  /** AC-04: only an account with the roles.assign key changes a role. */
+  const changeRole = (target: string, next: RoleId): void => {
+    if (!session) {
+      return;
+    }
+    try {
+      setAssignments(assignRole({ storage, actor: session.username, target, role: next }));
+      setRoleError(null);
+    } catch (caught) {
+      setRoleError(safeError(caught).message);
+    }
   };
 
   if (session === null) {
@@ -420,7 +597,15 @@ export default function App() {
             </span>
             <div className="cost-tile">
               <span className="eyebrow">Session cost</span>
-              <span className="cost-value">{formatUsd(totalCost)}</span>
+              <motion.span
+                key={totalCost}
+                className="cost-value"
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.24 }}
+              >
+                {formatUsd(totalCost)}
+              </motion.span>
             </div>
             <button type="button" className="btn btn--ghost btn--sm" onClick={signOut}>
               <Icon name="lock" size={12} />
@@ -432,10 +617,16 @@ export default function App() {
 
       <main className="shell">
         <aside className="rail" ref={keysRef}>
-          <KeyPanel vault={session.vault} keys={keys} manifests={BUILTIN_MANIFESTS} onChanged={refreshKeys} />
+          <KeyPanel
+            vault={session.vault}
+            keys={keys}
+            manifests={enabledManifests}
+            onChanged={refreshKeys}
+            canManage={can(role, "keys.manage")}
+          />
 
           <ProfilePanel
-            manifests={BUILTIN_MANIFESTS}
+            manifests={enabledManifests}
             manifest={manifest}
             providerId={providerId}
             onProviderChange={changeProvider}
@@ -450,7 +641,23 @@ export default function App() {
             onBaseUrlChange={setBaseUrl}
             baseUrlCheck={baseUrlCheck}
             catalogSource={catalogSource}
+            canRoute={can(role, "route.manage")}
+            providerModels={providerModels}
+            modelsBusy={modelsBusy}
+            modelsError={modelsError}
+            onReloadModels={reloadModels}
           />
+
+          {role && can(role, "roles.assign") ? (
+            <RolesPanel
+              accounts={accounts}
+              assignments={assignments}
+              currentUser={session.username}
+              actorRole={role}
+              error={roleError}
+              onAssign={changeRole}
+            />
+          ) : null}
 
           {catalogWarning ? (
             <div className="callout callout--cyan" role="status">
@@ -477,6 +684,9 @@ export default function App() {
             </div>
             <div className="workspace-chips">
               <span className="chip">{manifest.displayName}</span>
+              {role ? (
+                <span className={`chip ${role === "owner" ? "chip--amber" : ""}`}>{ROLE_LABELS[role]}</span>
+              ) : null}
               {selectedKey ? (
                 <span className="chip chip--amber">
                   <Icon name="key" size={10} />
@@ -501,25 +711,37 @@ export default function App() {
             </div>
           </div>
 
-          {tab === "chat" ? (
-            <ChatPanel
-              messages={messages}
-              streaming={streaming}
-              canSend={canSend}
-              blockReason={blockReason}
-              onSend={send}
-              onStop={stop}
-              onErrorAction={onErrorAction}
-            />
-          ) : (
-            <ArenaPanel
-              models={models}
-              canRun={canSend}
-              blockReason={blockReason}
-              onRun={runArena}
-              onPick={pickArenaAnswer}
-            />
-          )}
+          <motion.div
+            key={tab}
+            className="workspace-pane"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {tab === "chat" ? (
+              <ChatPanel
+                messages={messages}
+                streaming={streaming}
+                canSend={canSend}
+                blockReason={blockReason}
+                onSend={send}
+                onStop={stop}
+                onErrorAction={onErrorAction}
+              />
+            ) : (
+              <ArenaPanel
+                models={models}
+                canRun={canSend && can(role, "arena.run")}
+                blockReason={
+                  !can(role, "arena.run")
+                    ? "Your role cannot run the arena. Ask an owner to change your role."
+                    : blockReason
+                }
+                onRun={runArena}
+                onPick={pickArenaAnswer}
+              />
+            )}
+          </motion.div>
         </section>
       </main>
 

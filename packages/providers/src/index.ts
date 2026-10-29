@@ -4,6 +4,7 @@ export * from "./catalog";
 export * from "./classify";
 export * from "./cost";
 export * from "./manifest";
+export * from "./models";
 export * from "./rules";
 export * from "./sse";
 export * from "./stream";

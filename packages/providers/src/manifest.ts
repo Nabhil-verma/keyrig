@@ -35,6 +35,11 @@ export interface ProviderManifest {
   priceSource: string;
   /** PV-02: the wire field for the output limit. The value is a provider quirk. */
   maxTokensField: "max_tokens" | "max_completion_tokens";
+  /**
+   * An optional message for a network failure that never got an HTTP response.
+   * Example: a hosted API that does not allow the browser origin (CORS).
+   */
+  networkHint?: string;
 }
 
 export function getManifest(

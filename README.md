@@ -1,9 +1,5 @@
 # keyrig
 
-<p align="center">
-  <img src="apps/web/public/brand/horizontal-dark.svg" alt="keyrig — bring your own key" width="280" />
-</p>
-
 **keyrig is a BYOK AI harness. One key connects to many AI models.**
 
 You bring your own provider keys. keyrig stores them encrypted in your browser. Each prompt goes to the
@@ -41,15 +37,19 @@ the error classes and the recorded-traffic tests.
 Phase 2 has a first web app. It covers keys, chat with provenance, the cost estimate, the model arena
 and a set of public pages.
 
-The artifact canvas, the coding agent and MCP are not built yet.
+The artifact canvas and the coding agent are not built yet.
 
 ---
 
 ## Features
 
 - **Encrypted key vault.** Your password opens the vault. The app encrypts each key before it saves the key.
-- **Five provider types.** OpenAI, Anthropic, Ollama, LM Studio and any OpenAI-compatible server.
+- **Six built-in providers.** OpenAI, Anthropic, Freebuff, Ollama, LM Studio and any OpenAI-compatible server.
+  Freebuff needs a CORS header on its API before a browser can call it. The app shows a clear message until then.
 - **Streaming chat.** Answers stream in. Stop keeps the partial text and marks the answer as partial or aborted.
+- **Model picker.** A provider that lists its models fills the picker. You can reload the list, or type a name that the list does not have.
+- **MCP connectors.** Add a tool server in Settings, scan its tools, allow the ones you trust and run them.
+  keyrig sends the arguments and reads the text. It sends no key.
 - **Provenance on every answer.** Each answer shows the model, the key label, the token counts and the price state.
 - **Cost estimate.** Catalog prices turn into an estimated cost. A price that keyrig does not know shows as unknown.
 - **Model arena.** Send one prompt to several models at once. Compare time, cost and answer. Continue with the answer you choose.
@@ -58,6 +58,8 @@ The artifact canvas, the coding agent and MCP are not built yet.
 - **Blocked addresses.** keyrig blocks cloud metadata addresses as a custom base URL.
 - **Light and dark themes.** The theme follows your choice and stays in this browser.
 - **Lock on sign-out.** Sign-out locks the vault. It drops the decrypted keys from memory and stops any stream.
+- **Roles.** The first account on the device is the owner. An owner or an admin grants a role. Each protected
+  feature checks a permission key, not a role name. See [docs/RBAC.md](docs/RBAC.md).
 
 ---
 
@@ -122,7 +124,7 @@ Use the local test provider to send prompts without a real key.
 
 2. In the app, choose the provider **OpenAI-compatible**.
 3. Set the base URL to `http://127.0.0.1:8788/v1`.
-4. Set the model to any name, for example `fake-model`.
+4. Pick the model from the list. The local server lists `fake-model` and `fake-model-small`.
 5. Add any key. The local server does not check the key.
 6. Send a prompt.
 
@@ -142,6 +144,8 @@ The local server also streams slowly for a prompt that contains the word `slow`.
 | `npm run check:layers` | Check that no package imports a layer above it. |
 | `npm run build` | Build the web app into `apps/web/dist`. |
 | `npm run fake-provider` | Start the local test provider on `127.0.0.1:8788`. |
+| `npm run fake-mcp` | Start the local MCP test server on `127.0.0.1:8789`. |
+| `npm run test:e2e` | Run the Playwright browser tests against the two local test servers. |
 
 ---
 
@@ -226,6 +230,8 @@ What keyrig does not do:
 - It does not recover a forgotten password. Keep a copy of your password in a safe place.
 - It does not send a key to any endpoint except the one that you choose.
 - It does not put a key, a key fragment or a request header in a log, an error or a chat message.
+- It does not guard a role with a server. The role records stay in this browser, so the checks stop mistakes,
+  not the device owner.
 
 ---
 
@@ -237,7 +243,7 @@ Run the full suite with one command.
 npm test
 ```
 
-The suite has 134 tests in 11 files. It replays recorded provider traffic. It needs no network and no key.
+The suite has 144 tests in 12 files. It replays recorded provider traffic. It needs no network and no key.
 
 - [docs/TEST_PLAN.md](docs/TEST_PLAN.md) maps each rule to the test that proves it.
 - [packages/providers/src/tests/fixtures](packages/providers/src/tests/fixtures) holds the recorded traffic.
@@ -257,7 +263,7 @@ Many test names include the rule ID that they check. The test plan lists the lin
 - **Themes.** Dark is the default. Light is one click away. Both themes use the same tokens.
 
 The brand mark is a key head with a central hub and three nodes. The mark is in
-[apps/web/public/brand](apps/web/public/brand). The brand rules are in [docs/BRAND.md](docs/BRAND.md).
+[apps/web/public/brand](apps/web/public/brand).
 
 ---
 
@@ -272,6 +278,14 @@ npm run build
 The app uses browser routing for `/providers`, `/security` and `/app`. Your host must serve
 `index.html` for these paths. Without that rule, a direct visit to a path returns 404.
 
+The repository has the rule for three hosts:
+
+- **Netlify and Cloudflare Pages.** `apps/web/public/_redirects` is copied into `dist`.
+- **Vercel.** `apps/web/vercel.json` rewrites every path to `index.html`. Set the project root to
+  `apps/web`.
+
+The static files keep their own paths. The rule applies only to paths without a file.
+
 WARNING: Serve the app over HTTPS in production. The vault uses WebCrypto, and browsers allow it only in
 a secure context. The localhost address counts as secure. Other plain HTTP addresses do not.
 
@@ -282,9 +296,8 @@ a secure context. The localhost address counts as secure. Other plain HTTP addre
 - The desktop app and the OS keychain (KS-01).
 - Provider profiles, the fallback chain and model migration (PV-04, PV-06, PV-10).
 - Budgets and run limits (CO-02, CO-03).
-- The artifact canvas, checkpoints, approvals, MCP and the coding agent (Phase 3 and 4).
+- The artifact canvas, checkpoints, approvals and the coding agent (Phase 3 and 4).
 - The `doctor` command and the CLI (KS-08, KS-09).
-- Saved settings between reloads. The app keeps the provider and the model in memory only.
 
 ---
 
@@ -311,6 +324,7 @@ Short version:
 | [docs/STYLE.md](docs/STYLE.md) | The writing style for all keyrig text. |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | The words that keyrig uses for each meaning. |
 | [docs/TEST_PLAN.md](docs/TEST_PLAN.md) | Each rule and the test that proves it. |
+| [docs/RBAC.md](docs/RBAC.md) | The permission keys, the roles and the rules. |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Decisions and their reasons. |
 | [docs/INSPIRED_BY.md](docs/INSPIRED_BY.md) | The projects that inspired keyrig. |
 

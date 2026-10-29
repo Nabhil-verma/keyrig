@@ -25,6 +25,17 @@ describe("PV-02 provider manifests", () => {
     expect(ids).toEqual(expect.arrayContaining(["openai", "anthropic", "ollama", "lmstudio", "openai-compatible"]));
   });
 
+  it("adds Freebuff as an OpenAI-compatible hosted provider", () => {
+    const freebuff = BUILTIN_MANIFESTS.find((manifest) => manifest.id === "freebuff");
+    expect(freebuff).toBeDefined();
+    expect(freebuff?.displayName).toBe("Freebuff");
+    expect(freebuff?.authType).toBe("api-key");
+    expect(freebuff?.baseUrl).toBe("https://freebuff.com/api/v1/paid");
+    expect(freebuff?.wireFormat).toBe("openai-chat");
+    expect(freebuff && envVarFor(freebuff)).toBe("FREEBUFF_API_KEY");
+    expect(freebuff?.networkHint).toMatch(/browser origin/);
+  });
+
   it("gives the hosted providers a standard environment variable (KS-08)", () => {
     const openai = BUILTIN_MANIFESTS.find((manifest) => manifest.id === "openai");
     const anthropic = BUILTIN_MANIFESTS.find((manifest) => manifest.id === "anthropic");

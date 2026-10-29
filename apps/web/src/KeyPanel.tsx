@@ -9,6 +9,8 @@ interface KeyPanelProps {
   keys: KeyView[];
   manifests: readonly ProviderManifest[];
   onChanged: () => void;
+  /** AC-01: the keys.manage permission key. */
+  canManage: boolean;
 }
 
 function safeError(error: unknown): KeyrigErrorJSON {
@@ -29,9 +31,11 @@ function dateText(value: string): string {
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function KeyPanel({ vault, keys, manifests, onChanged }: KeyPanelProps) {
+export function KeyPanel({ vault, keys, manifests, onChanged, canManage }: KeyPanelProps) {
   const [error, setError] = useState<KeyrigErrorJSON | null>(null);
   const [busy, setBusy] = useState(false);
+  /** The vault folds away, so the route and the chat keep the screen. */
+  const [open, setOpen] = useState(true);
 
   const [label, setLabel] = useState("");
   const [providerId, setProviderId] = useState(manifests[0]?.id ?? "openai");
@@ -82,11 +86,24 @@ export function KeyPanel({ vault, keys, manifests, onChanged }: KeyPanelProps) {
           <span className="eyebrow eyebrow--amber">Key vault</span>
           <h2 id="vault-title">Your keys</h2>
         </div>
-        <span className="state-pill" data-state="unlocked">
-          UNLOCKED
-        </span>
+        <div className="panel-head-actions">
+          <span className="state-pill" data-state="unlocked">
+            UNLOCKED
+          </span>
+          <button
+            type="button"
+            className="vault-toggle"
+            aria-expanded={open}
+            aria-controls="vault-body"
+            title={open ? "Close the key vault" : "Open the key vault"}
+            onClick={() => setOpen((value) => !value)}
+          >
+            <Icon name="chevron" size={14} />
+          </button>
+        </div>
       </div>
 
+      <div id="vault-body" hidden={!open}>
       {keys.length === 0 ? (
         <p className="key-empty">No keys yet. Add your first key below.</p>
       ) : (
@@ -116,6 +133,7 @@ export function KeyPanel({ vault, keys, manifests, onChanged }: KeyPanelProps) {
                   <button
                     type="button"
                     className="btn btn--quiet btn--sm"
+                    disabled={!canManage}
                     onClick={() => {
                       setReplacing(replacing === key.id ? null : key.id);
                       setReplacement("");
@@ -127,7 +145,11 @@ export function KeyPanel({ vault, keys, manifests, onChanged }: KeyPanelProps) {
                   <button
                     type="button"
                     className="btn btn--quiet btn--sm"
+                    disabled={!canManage}
                     onClick={() => {
+                      if (!canManage) {
+                        return;
+                      }
                       if (!window.confirm(`Delete the key ${key.label}? Chats that use this key stop.`)) {
                         return;
                       }
@@ -154,7 +176,7 @@ export function KeyPanel({ vault, keys, manifests, onChanged }: KeyPanelProps) {
                     <button
                       type="button"
                       className="btn btn--primary btn--sm"
-                      disabled={busy}
+                      disabled={busy || !canManage}
                       onClick={() => saveReplacement(key.id)}
                     >
                       Save
@@ -178,6 +200,7 @@ export function KeyPanel({ vault, keys, manifests, onChanged }: KeyPanelProps) {
             <input
               id="key-label"
               className="input"
+              disabled={!canManage}
               value={label}
               placeholder="For example: work"
               onChange={(event) => setLabel(event.target.value)}
@@ -188,6 +211,7 @@ export function KeyPanel({ vault, keys, manifests, onChanged }: KeyPanelProps) {
             <select
               id="key-provider"
               className="select"
+              disabled={!canManage}
               value={providerId}
               onChange={(event) => setProviderId(event.target.value)}
             >
@@ -209,6 +233,7 @@ export function KeyPanel({ vault, keys, manifests, onChanged }: KeyPanelProps) {
               type={reveal ? "text" : "password"}
               autoComplete="off"
               spellCheck={false}
+              disabled={!canManage}
               value={secret}
               placeholder="Paste the provider key"
               onChange={(event) => setSecret(event.target.value)}
@@ -216,6 +241,7 @@ export function KeyPanel({ vault, keys, manifests, onChanged }: KeyPanelProps) {
             <button
               type="button"
               className="field-action"
+              disabled={!canManage}
               onClick={() => setReveal((value) => !value)}
               aria-label={reveal ? "Hide the key" : "Show the key"}
             >
@@ -226,24 +252,41 @@ export function KeyPanel({ vault, keys, manifests, onChanged }: KeyPanelProps) {
 
         <div className="field">
           <label htmlFor="key-project">Project (optional)</label>
-          <input
-            id="key-project"
-            className="input"
-            value={projectId}
+          <input              id="key-project"
+              className="input"
+              disabled={!canManage}
+              value={projectId}
             placeholder="Bind the key to a project"
             onChange={(event) => setProjectId(event.target.value)}
           />
         </div>
 
         {error ? <p className="inline-error callout">{error.message}</p> : null}
+        {!canManage ? (
+          <p className="hint">Your role cannot change keys. Ask an owner to change your role.</p>
+        ) : null}
         <div className="btn-row">
-          <button type="button" className="btn btn--primary btn--block" disabled={busy} onClick={addKey}>
+          <button
+            type="button"
+            className="btn btn--primary btn--block"
+            disabled={busy || !canManage}
+            onClick={addKey}
+          >
             <Icon name="plus" size={15} />
             Save the key
           </button>
         </div>
         <p className="hint hint--mono">ENCRYPTED WITH AES-GCM BEFORE THE SAVE.</p>
       </div>
+      </div>
+
+      {open ? null : (
+        <p className="vault-summary">
+          {keys.length === 0
+            ? "No keys on this device."
+            : `${keys.length} ${keys.length === 1 ? "key" : "keys"} on this device.`}
+        </p>
+      )}
     </section>
   );
 }

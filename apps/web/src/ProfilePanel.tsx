@@ -1,6 +1,7 @@
 import type { KeyView } from "@keyrig/core";
 import type { BaseUrlCheck, CatalogModel, CatalogSource, ProviderManifest } from "@keyrig/providers";
 import { formatUsd } from "@keyrig/providers";
+import { ModelPicker } from "./ModelPicker";
 import { Icon } from "./ui/Icon";
 
 interface ProfilePanelProps {
@@ -19,6 +20,13 @@ interface ProfilePanelProps {
   onBaseUrlChange: (value: string) => void;
   baseUrlCheck: BaseUrlCheck | null;
   catalogSource: CatalogSource | null;
+  /** AC-01: the route.manage permission key. */
+  canRoute: boolean;
+  /** PV-11: the model names that the provider returned. */
+  providerModels: string[];
+  modelsBusy: boolean;
+  modelsError: string | null;
+  onReloadModels: () => void;
 }
 
 function compact(value: number): string {
@@ -47,6 +55,11 @@ export function ProfilePanel({
   onBaseUrlChange,
   baseUrlCheck,
   catalogSource,
+  canRoute,
+  providerModels,
+  modelsBusy,
+  modelsError,
+  onReloadModels,
 }: ProfilePanelProps) {
   const abilities = catalogModel
     ? [
@@ -72,6 +85,7 @@ export function ProfilePanel({
         <select
           id="provider"
           className="select"
+          disabled={!canRoute}
           value={providerId}
           onChange={(event) => onProviderChange(event.target.value)}
         >
@@ -83,25 +97,19 @@ export function ProfilePanel({
         </select>
       </div>
 
-      <div className="field">
-        <label htmlFor="model">Model</label>
-        <input
-          id="model"
-          className="input mono"
-          list="model-options"
-          value={modelId}
-          placeholder="Model name"
-          spellCheck={false}
-          onChange={(event) => onModelChange(event.target.value)}
-        />
-        <datalist id="model-options">
-          {models.map((model) => (
-            <option key={model.id} value={model.id}>
-              {model.name}
-            </option>
-          ))}
-        </datalist>
-      </div>
+      <ModelPicker
+        key={providerId}
+        id="model"
+        modelId={modelId}
+        onModelChange={onModelChange}
+        catalogModels={models.map((model) => model.id)}
+        providerModels={providerModels}
+        loading={modelsBusy}
+        error={modelsError}
+        disabled={!canRoute}
+        supportsList={manifest.abilities.modelList}
+        onReload={onReloadModels}
+      />
 
       {catalogModel ? (
         <div className="facts">
@@ -151,7 +159,13 @@ export function ProfilePanel({
 
       <div className="field">
         <label htmlFor="key">Key</label>
-        <select id="key" className="select" value={keyId} onChange={(event) => onKeyChange(event.target.value)}>
+        <select
+          id="key"
+          className="select"
+          value={keyId}
+          disabled={!canRoute}
+          onChange={(event) => onKeyChange(event.target.value)}
+        >
           {keys.length === 0 ? <option value="">No key for this provider</option> : null}
           {keys.map((key) => (
             <option key={key.id} value={key.id}>
@@ -163,11 +177,11 @@ export function ProfilePanel({
 
       {manifest.supportsCustomBaseUrl ? (
         <div className="field">
-          <label htmlFor="base-url">Base URL</label>
-          <input
-            id="base-url"
-            className="input mono"
-            value={baseUrl}
+          <label htmlFor="base-url">Base URL</label>            <input
+              id="base-url"
+              className="input mono"
+              disabled={!canRoute}
+              value={baseUrl}
             spellCheck={false}
             onChange={(event) => onBaseUrlChange(event.target.value)}
           />
@@ -179,6 +193,8 @@ export function ProfilePanel({
           ) : null}
         </div>
       ) : null}
+
+      {!canRoute ? <p className="hint">Your role cannot change the route. Ask an owner to change your role.</p> : null}
 
       <div className="panel-foot">
         <span className="eyebrow">

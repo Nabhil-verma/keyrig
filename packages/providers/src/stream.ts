@@ -2,7 +2,7 @@ import { KeyrigError } from "@keyrig/shared";
 import { readAnthropicStream } from "./adapters/anthropic";
 import { readOllamaStream } from "./adapters/ollama";
 import { readOpenAiStream, type ParsedStream } from "./adapters/openai";
-import { classifyThrown, providerHttpError } from "./classify";
+import { classifyNetworkFailure, classifyThrown, providerHttpError } from "./classify";
 import { checkBaseUrl, type ProviderManifest } from "./manifest";
 import { planRequest, type RequestRule } from "./rules";
 import type { ChatRequest, ChatResult, ProviderCallConfig, StopReason, StreamHandlers } from "./types";
@@ -117,7 +117,10 @@ export async function runChat(options: RunChatOptions): Promise<ChatResult> {
     if (timedOut) {
       throw KeyrigError.fromCategory("timeout", { details: { timeoutMs } });
     }
-    throw classifyThrown(error, secrets);
+    throw classifyNetworkFailure(error, {
+      ...(manifest.networkHint !== undefined ? { networkHint: manifest.networkHint } : {}),
+      secrets,
+    });
   }
 
   if (!response.ok) {

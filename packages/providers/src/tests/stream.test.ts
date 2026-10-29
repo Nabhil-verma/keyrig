@@ -265,3 +265,33 @@ describe("key handling", () => {
     expect((seen as Record<string, string>).authorization).toBe(`Bearer ${KEY}`);
   });
 });
+
+describe("PV-02 a network failure uses the manifest hint", () => {
+  it("shows the hint when the fetch throws before a response", async () => {
+    const hinted: ProviderManifest = {
+      ...openai,
+      id: "hinted",
+      networkHint: "This provider does not allow this browser origin.",
+    };
+    const fetchImpl = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch;
+    const error = (await chat(hinted, fetchImpl, { apiKey: KEY }).catch((caught: unknown) => caught)) as KeyrigError;
+
+    expect(error).toBeInstanceOf(KeyrigError);
+    expect(error.category).toBe("network");
+    expect(error.code).toBe("network_failed");
+    expect(error.message).toBe("This provider does not allow this browser origin.");
+    expect(error.message).not.toContain(KEY);
+  });
+
+  it("keeps the default network message when the manifest has no hint", async () => {
+    const fetchImpl = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch;
+    const error = (await chat(openai, fetchImpl, { apiKey: KEY }).catch((caught: unknown) => caught)) as KeyrigError;
+
+    expect(error.category).toBe("network");
+    expect(error.message).toMatch(/cannot reach the provider/);
+  });
+});

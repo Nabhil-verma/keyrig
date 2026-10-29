@@ -52,6 +52,32 @@ export const BUILTIN_MANIFESTS: readonly ProviderManifest[] = [
     maxTokensField: "max_tokens",
   },
   {
+    id: "freebuff",
+    displayName: "Freebuff",
+    authType: "api-key",
+    baseUrl: "https://freebuff.com/api/v1/paid",
+    defaultModel: "gpt-5.4",
+    envVars: ["FREEBUFF_API_KEY"],
+    abilities: {
+      streaming: true,
+      tools: false,
+      images: false,
+      reasoning: false,
+      promptCache: false,
+      modelList: true,
+    },
+    wireFormat: "openai-chat",
+    reasoningFormat: "none",
+    docsUrl: "https://freebuff.com/account/api",
+    supportsCustomBaseUrl: false,
+    priceSource: "none",
+    maxTokensField: "max_tokens",
+    // The API sends no CORS header. A browser blocks the request before it
+    // leaves, so the user gets this note instead of a generic network error.
+    networkHint:
+      "Freebuff does not allow this browser origin, so the browser blocks the request. Ask Freebuff to allow the app origin, or use another provider.",
+  },
+  {
     id: "ollama",
     displayName: "Ollama",
     authType: "none",

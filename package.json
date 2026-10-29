@@ -17,11 +17,14 @@
     "build": "npm run build --workspace @keyrig/web",
     "test": "vitest run && node tools/check-layers.mjs",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "fake-provider": "node tools/fake-provider.mjs",
+    "fake-mcp": "node tools/fake-mcp.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.check.json && node tools/check-layers.mjs",
     "check:layers": "node tools/check-layers.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@types/node": "26.6.5",
     "typescript": "7.0.2",
     "vitest": "5.0.5"

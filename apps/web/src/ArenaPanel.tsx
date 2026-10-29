@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { formatUsd, type CatalogModel } from "@keyrig/providers";
 import { ErrorCard } from "./ErrorCard";
+import { fadeUp, stagger } from "./motion";
 import type { ArenaResult } from "./types";
 import { Icon } from "./ui/Icon";
 
@@ -54,12 +56,18 @@ export function ArenaPanel({ models, canRun, blockReason, onRun, onPick }: Arena
   return (
     <section className="arena">
       <div className="arena-inner">
-        <p className="arena-intro">
+        <motion.p className="arena-intro" variants={fadeUp} initial="hidden" animate="show">
           Send one prompt to many models at the same time. Compare the answer, the latency and the estimated
           cost, then continue the chat with the answer you choose.
-        </p>
+        </motion.p>
 
-        <div className="arena-setup">
+        <motion.div
+          className="arena-setup"
+          variants={fadeUp}
+          initial="hidden"
+          animate="show"
+          transition={{ delay: 0.06 }}
+        >
           <div className="field">
             <label htmlFor="arena-prompt">Prompt</label>
             <textarea
@@ -126,7 +134,7 @@ export function ArenaPanel({ models, canRun, blockReason, onRun, onPick }: Arena
             </span>
             <button
               type="button"
-              className="btn btn--primary"
+              className="btn btn--primary btn--lg btn--glow"
               disabled={!canRun || running || selected.length === 0 || prompt.trim().length === 0}
               onClick={() => void run()}
             >
@@ -134,15 +142,41 @@ export function ArenaPanel({ models, canRun, blockReason, onRun, onPick }: Arena
               {running ? "The models are answering" : `Run ${selected.length || ""} models`}
             </button>
           </div>
-        </div>
+        </motion.div>
 
-        {results.length > 0 ? (
-          <div
-            className="arena-results"
-            style={{ gridTemplateColumns: `repeat(${Math.min(results.length, 3)}, minmax(0, 1fr))` }}
-          >
+        {running && results.length === 0 ? (
+          <div className="arena-skeletons" aria-hidden="true">
+            <span className="arena-skeleton" />
+            <span className="arena-skeleton" />
+            <span className="arena-skeleton" />
+          </div>
+        ) : null}
+
+        {!running && results.length === 0 ? (
+          <div className="arena-empty">
+            <span className="eyebrow eyebrow--cyan">Comparison</span>
+            <p>Run the prompt to compare the answers, the time and the cost.</p>
+          </div>
+        ) : null}
+
+        <AnimatePresence mode="popLayout">
+          {results.length > 0 ? (
+            <motion.div
+              className="arena-results"
+              variants={stagger(0.07)}
+              initial="hidden"
+              animate="show"
+              exit={{ opacity: 0, y: -8 }}
+              style={{ gridTemplateColumns: `repeat(${Math.min(results.length, 3)}, minmax(0, 1fr))` }}
+            >
             {results.map((result) => (
-              <article key={result.model} className="arena-result">
+              <motion.article
+                key={result.model}
+                className="arena-result"
+                variants={fadeUp}
+                layout
+                exit={{ opacity: 0, scale: 0.98 }}
+              >
                 <header className="arena-result-head">
                   <strong>{result.model}</strong>
                   <span className="arena-time">{(result.durationMs / 1000).toFixed(1)}s</span>
@@ -178,10 +212,11 @@ export function ArenaPanel({ models, canRun, blockReason, onRun, onPick }: Arena
                     </button>
                   </>
                 )}
-              </article>
+              </motion.article>
             ))}
-          </div>
-        ) : null}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </div>
     </section>
   );

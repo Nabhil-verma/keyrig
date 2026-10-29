@@ -211,3 +211,25 @@ export function classifyThrown(error: unknown, secrets?: Iterable<string>): Keyr
     ...(secrets !== undefined ? { secrets } : {}),
   });
 }
+
+/**
+ * PV-02 and PV-11: a fetch failure that never got an HTTP response. A manifest
+ * hint replaces the network text, so a known block has a clear reason. The
+ * category stays "network".
+ */
+export function classifyNetworkFailure(
+  error: unknown,
+  options: { networkHint?: string; secrets?: Iterable<string> } = {},
+): KeyrigError {
+  const failure = classifyThrown(error, options.secrets);
+  if (options.networkHint !== undefined && failure.category === "network") {
+    return KeyrigError.fromCategory("network", {
+      message: options.networkHint,
+      retryable: false,
+      action: "none",
+      cause: error,
+      ...(options.secrets !== undefined ? { secrets: options.secrets } : {}),
+    });
+  }
+  return failure;
+}

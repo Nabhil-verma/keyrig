@@ -2,9 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { formatUsd } from "@keyrig/providers";
 import { ErrorCard } from "./ErrorCard";
+import { fadeUp, stagger } from "./motion";
+import { takePendingPrompt, USE_PROMPT_EVENT } from "./pendingPrompt";
 import type { UIMessage } from "./types";
 import { BrandMark } from "./ui/BrandMark";
-import { Icon } from "./ui/Icon";
+import { Icon, type IconName } from "./ui/Icon";
+
+/** The three cards under the empty state. The copy is the same as the first screen. */
+const QUICK_FEATURES: Array<{ icon: IconName; title: string; text: string }> = [
+  { icon: "lock", title: "Encrypted at rest", text: "WebCrypto with your passphrase. No server holds a key." },
+  { icon: "check", title: "Signed answers", text: "Model, key label and token counts stay attached to each reply." },
+  { icon: "wallet", title: "Cost in view", text: "Catalog prices become an estimate before you commit the run." },
+];
 
 interface ChatPanelProps {
   messages: UIMessage[];
@@ -31,7 +40,28 @@ export function ChatPanel({ messages, streaming, canSend, blockReason, onSend, o
   const [draft, setDraft] = useState("");
   const endRef = useRef<HTMLDivElement | null>(null);
 
+  // A skill fills the prompt. The event covers a chat that is already open.
   useEffect(() => {
+    const pending = takePendingPrompt();
+    if (pending !== null) {
+      setDraft(pending);
+    }
+    const onUse = (event: Event): void => {
+      takePendingPrompt();
+      const detail = (event as CustomEvent<string>).detail;
+      if (typeof detail === "string") {
+        setDraft(detail);
+      }
+    };
+    window.addEventListener(USE_PROMPT_EVENT, onUse);
+    return () => window.removeEventListener(USE_PROMPT_EVENT, onUse);
+  }, []);
+
+  useEffect(() => {
+    if (messages.length === 0) {
+      // Keep the empty state at its start. A scrolled container hides the first card.
+      return;
+    }
     endRef.current?.scrollIntoView({ block: "end" });
   }, [messages.length, messages[messages.length - 1]?.content]);
 
@@ -48,46 +78,45 @@ export function ChatPanel({ messages, streaming, canSend, blockReason, onSend, o
     <section className="chat">
       <div className="messages" aria-live="polite">
         {messages.length === 0 ? (
-          <div className="chat-empty">
-            <div className="hero">
+          <motion.div className="chat-empty" variants={stagger(0.07)} initial="hidden" animate="show">
+            <motion.div className="chat-hero" variants={fadeUp}>
               <span className="hero-badge">
                 <Icon name="shield" size={12} />
                 Keys stay in this browser. They go only to your provider.
               </span>
-              <h1>
-                One key. <span className="accent">Every model.</span>
+              <h1 className="chat-title">
+                One key. <span className="chat-title-accent">Every model.</span>
               </h1>
-              <p>
+              <p className="lead">
                 keyrig is a BYOK harness. Add a provider key once, then route each prompt to the model that
                 fits. Every answer shows its model, its key label and its estimated cost.
               </p>
-            </div>
+              <ul className="hero-proof">
+                <li>
+                  <Icon name="globe" size={13} /> No server
+                </li>
+                <li>
+                  <Icon name="eyeOff" size={13} /> Zero telemetry
+                </li>
+                <li>
+                  <Icon name="wallet" size={13} /> Cost in view
+                </li>
+              </ul>
+            </motion.div>
 
-            <div className="feature-grid">
-              <article className="feature">
-                <span className="feature-icon">
-                  <Icon name="lock" size={15} />
-                </span>
-                <h3>Encrypted at rest</h3>
-                <p>WebCrypto with your passphrase. No server holds a key.</p>
-              </article>
-              <article className="feature">
-                <span className="feature-icon">
-                  <Icon name="check" size={15} />
-                </span>
-                <h3>Signed answers</h3>
-                <p>Model, key label and token counts stay attached to each reply.</p>
-              </article>
-              <article className="feature">
-                <span className="feature-icon">
-                  <Icon name="wallet" size={15} />
-                </span>
-                <h3>Cost in view</h3>
-                <p>Catalog prices become an estimate before you commit the run.</p>
-              </article>
-            </div>
+            <motion.div className="chat-features" variants={stagger(0.06)}>
+              {QUICK_FEATURES.map((feature) => (
+                <motion.article key={feature.title} className="chat-feature" variants={fadeUp}>
+                  <span className="feature-icon">
+                    <Icon name={feature.icon} size={15} />
+                  </span>
+                  <h3>{feature.title}</h3>
+                  <p>{feature.text}</p>
+                </motion.article>
+              ))}
+            </motion.div>
 
-            <ol className="steps">
+            <motion.ol className="steps" variants={fadeUp}>
               <li>
                 <span className="step-num">01</span> Create an account
               </li>
@@ -100,8 +129,8 @@ export function ChatPanel({ messages, streaming, canSend, blockReason, onSend, o
               <li>
                 <span className="step-num">04</span> Send a prompt
               </li>
-            </ol>
-          </div>
+            </motion.ol>
+          </motion.div>
         ) : null}
 
         {messages.map((message) =>
@@ -131,7 +160,12 @@ export function ChatPanel({ messages, streaming, canSend, blockReason, onSend, o
                 <span className="msg-role">answer</span>
               </div>
 
-              {message.content.length > 0 ? <div className="msg-body">{message.content}</div> : null}
+              {message.content.length > 0 ? (
+                <div className="msg-body">
+                  {message.content}
+                  {streaming ? <span className="stream-caret" aria-hidden="true" /> : null}
+                </div>
+              ) : null}
 
               {message.content.length === 0 && !message.error && streaming ? (
                 <div className="typing" aria-label="The model is answering">

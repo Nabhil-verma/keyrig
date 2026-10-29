@@ -15,7 +15,7 @@ const PORT = 8788;
 
 const CORS = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "POST, OPTIONS",
+  "access-control-allow-methods": "GET, POST, OPTIONS",
   "access-control-allow-headers": "authorization, content-type",
 };
 
@@ -23,6 +23,21 @@ const server = createServer((request, response) => {
   if (request.method === "OPTIONS") {
     response.writeHead(204, CORS);
     response.end();
+    return;
+  }
+
+  // PV-11: the model list. The app reads this to fill the model field.
+  if (request.method === "GET" && request.url?.endsWith("/models")) {
+    response.writeHead(200, { ...CORS, "content-type": "application/json" });
+    response.end(
+      JSON.stringify({
+        object: "list",
+        data: [
+          { id: "fake-model", object: "model", owned_by: "local" },
+          { id: "fake-model-small", object: "model", owned_by: "local" },
+        ],
+      }),
+    );
     return;
   }
 
