@@ -1,6 +1,5 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { MotionConfig, motion, useScroll, useSpring } from "framer-motion";
-import App from "./App";
 import { HomePage } from "./pages/HomePage";
 import { SecurityPage } from "./pages/SecurityPage";
 
@@ -11,6 +10,8 @@ const ProvidersPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("./pages/SettingsPage").then((module) => ({ default: module.SettingsPage })),
 );
+// The workspace loads on the first visit to /app, then stays mounted.
+const Workspace = lazy(() => import("./App"));
 import { Link, useRoute, type Route } from "./router";
 import { SiteFooter, SiteHeader } from "./SiteChrome";
 import { EASE_OUT } from "./motion";
@@ -73,13 +74,25 @@ export function Site() {
   const route = useRoute();
   const onWorkspace = route === "/app";
   const settings = useSettings();
+  /** Mount the workspace on the first /app visit, then keep its state. */
+  const [workspaceReady, setWorkspaceReady] = useState(onWorkspace);
+
+  useEffect(() => {
+    if (onWorkspace) {
+      setWorkspaceReady(true);
+    }
+  }, [onWorkspace]);
 
   return (
     <MotionConfig reducedMotion={settings.motion === "reduced" ? "always" : "user"}>
       <ScrollProgress />
-      <div hidden={!onWorkspace}>
-        <App />
-      </div>
+      {workspaceReady ? (
+        <div hidden={!onWorkspace}>
+          <Suspense fallback={null}>
+            <Workspace />
+          </Suspense>
+        </div>
+      ) : null}
       {onWorkspace ? null : (
         <motion.div
           key={route}

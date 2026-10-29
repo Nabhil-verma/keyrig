@@ -6,6 +6,7 @@ import {
   can,
   createUsageBus,
   ensureAccountRole,
+  importVault,
   listAccounts,
   loadProviderModels,
   readAssignments,
@@ -493,6 +494,10 @@ export default function App() {
     enterSession(await signIn({ storage, username, password }));
   };
 
+  const handleImport = async (password: string, file: unknown): Promise<void> => {
+    enterSession(await importVault({ storage, password, file }));
+  };
+
   const refreshKeys = (): void => {
     setKeys(session ? session.vault.listKeys() : []);
   };
@@ -554,7 +559,7 @@ export default function App() {
               cost.
             </p>
           </div>
-          <AuthPanel onSignUp={handleSignUp} onSignIn={handleSignIn} />
+          <AuthPanel onSignUp={handleSignUp} onSignIn={handleSignIn} onImport={handleImport} />
         </main>
 
         <SiteFooter />
@@ -619,6 +624,7 @@ export default function App() {
         <aside className="rail" ref={keysRef}>
           <KeyPanel
             vault={session.vault}
+            username={session.username}
             keys={keys}
             manifests={enabledManifests}
             onChanged={refreshKeys}

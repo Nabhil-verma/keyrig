@@ -111,6 +111,30 @@ export class KeyVault {
     return this.#state === "unlocked";
   }
 
+  /**
+   * The encrypted record as stored. It holds the ciphertext, the salt and the
+   * IV, never a plain key. The export uses this to move a vault to a new address.
+   */
+  exportRecord(): string | null {
+    try {
+      return this.#storage.getItem(VAULT_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * True when a vault record is present, even if this build cannot read it.
+   * The account layer uses this to refuse a second account for the name.
+   */
+  hasStoredVault(): boolean {
+    try {
+      return this.#storage.getItem(VAULT_STORAGE_KEY) !== null;
+    } catch {
+      return false;
+    }
+  }
+
   /** Create the vault. The passphrase is not stored. */
   async create(passphrase: string): Promise<void> {
     this.#checkPassphrase(passphrase, "create");
@@ -118,6 +142,14 @@ export class KeyVault {
       throw KeyrigError.fromCategory("invalid_request", {
         code: "vault_exists",
         message: "The key vault already exists. Unlock it with the passphrase.",
+      });
+    }
+    // A record that this build cannot read is not an empty slot. Never overwrite it.
+    if (this.hasStoredVault()) {
+      throw KeyrigError.fromCategory("invalid_request", {
+        code: "vault_corrupt",
+        message: "keyrig found a key vault that it cannot read. It will not replace the vault. Keep a copy of this browser profile and ask for help.",
+        action: "check_settings",
       });
     }
     this.#salt = this.#crypto.getRandomValues(new Uint8Array(16));
@@ -136,7 +168,12 @@ export class KeyVault {
       });
     }
     const salt = fromBase64(blob.salt);
-    const key = await this.#deriveKey(passphrase, salt);
+    // Read the work factor from the record, so an imported vault still opens.
+    const iterations =
+      typeof blob.iterations === "number" && blob.iterations >= 1_000 && blob.iterations <= 2_000_000
+        ? blob.iterations
+        : this.#iterations;
+    const key = await this.#deriveKey(passphrase, salt, iterations);
     let plaintext: ArrayBuffer;
     try {
       plaintext = await this.#crypto.subtle.decrypt(
@@ -379,7 +416,7 @@ export class KeyVault {
     }
   }
 
-  async #deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
+  async #deriveKey(passphrase: string, salt: Uint8Array, iterations: number = this.#iterations): Promise<CryptoKey> {
     const material = await this.#crypto.subtle.importKey(
       "raw",
       new TextEncoder().encode(passphrase),
@@ -391,7 +428,7 @@ export class KeyVault {
       {
         name: "PBKDF2",
         salt: toArrayBuffer(salt),
-        iterations: this.#iterations,
+        iterations,
         hash: "SHA-256",
       },
       material,

@@ -1765,7 +1765,7 @@ body::before {
 
 .auth-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 3px;
   padding: 3px;
   margin-bottom: 18px;
@@ -1814,6 +1814,15 @@ body::before {
   color: var(--muted);
 }
 
+.auth-head .auth-scope {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--line-strong);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 .auth-form {
   display: flex;
   flex-direction: column;
@@ -1829,6 +1838,26 @@ body::before {
 
 .auth-submit {
   margin-top: 18px;
+}
+
+.auth-file {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.vault-backup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.vault-backup .hint {
+  margin: 0;
+  flex: 1 1 180px;
 }
 
 .auth-foot {

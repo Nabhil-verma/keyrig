@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { isKeyrigError, type KeyrigErrorJSON } from "@keyrig/shared";
-import type { KeyVault, KeyView } from "@keyrig/core";
+import { createVaultExport, type KeyVault, type KeyView } from "@keyrig/core";
 import type { ProviderManifest } from "@keyrig/providers";
 import { Icon } from "./ui/Icon";
 
 interface KeyPanelProps {
   vault: KeyVault;
+  username: string;
   keys: KeyView[];
   manifests: readonly ProviderManifest[];
   onChanged: () => void;
@@ -31,7 +32,7 @@ function dateText(value: string): string {
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function KeyPanel({ vault, keys, manifests, onChanged, canManage }: KeyPanelProps) {
+export function KeyPanel({ vault, username, keys, manifests, onChanged, canManage }: KeyPanelProps) {
   const [error, setError] = useState<KeyrigErrorJSON | null>(null);
   const [busy, setBusy] = useState(false);
   /** The vault folds away, so the route and the chat keep the screen. */
@@ -78,6 +79,23 @@ export function KeyPanel({ vault, keys, manifests, onChanged, canManage }: KeyPa
       setReplacing(null);
       setReplacement("");
     });
+
+  /** The file is the encrypted vault. It never holds a plain key. */
+  const exportVault = (): void => {
+    try {
+      const file = createVaultExport({ username, vault });
+      const blob = new Blob([JSON.stringify(file, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `keyrig-vault-${username}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setError(null);
+    } catch (caught) {
+      setError(safeError(caught));
+    }
+  };
 
   return (
     <section className="panel" aria-labelledby="vault-title">
@@ -188,6 +206,14 @@ export function KeyPanel({ vault, keys, manifests, onChanged, canManage }: KeyPa
           })}
         </ul>
       )}
+
+      <div className="vault-backup">
+        <button type="button" className="btn btn--quiet btn--sm" onClick={exportVault}>
+          <Icon name="download" size={13} />
+          Export the vault
+        </button>
+        <p className="hint">The file holds the encrypted vault. Keep the password safe.</p>
+      </div>
 
       <div className="add-key">
         <div className="add-key-head">

@@ -89,6 +89,17 @@ describe("KS-02 the vault encrypts keys before it saves them", () => {
     await expect(vault.create(PASSPHRASE)).rejects.toMatchObject({ code: "vault_exists" });
   });
 
+  it("refuses to replace a vault record that it cannot read", async () => {
+    const { storage } = makeVault();
+    const corrupt = JSON.stringify({ schemaVersion: 1, appliedMigrations: [], data: { not: "a blob" } });
+    storage.setItem(VAULT_STORAGE_KEY, corrupt);
+
+    const fresh = new KeyVault({ storage, iterations: 1000 });
+    expect(fresh.hasStoredVault()).toBe(true);
+    await expect(fresh.create(PASSPHRASE)).rejects.toMatchObject({ code: "vault_corrupt" });
+    expect(storage.getItem(VAULT_STORAGE_KEY)).toBe(corrupt);
+  });
+
   it("keeps every operation locked until unlock", async () => {
     const { vault } = await unlockedVault();
     vault.lock();

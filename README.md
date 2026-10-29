@@ -44,6 +44,8 @@ The artifact canvas and the coding agent are not built yet.
 ## Features
 
 - **Encrypted key vault.** Your password opens the vault. The app encrypts each key before it saves the key.
+- **Vault export.** Download the encrypted vault and import it at another keyrig address. The vault password
+  opens the file. keyrig sends the file nowhere.
 - **Six built-in providers.** OpenAI, Anthropic, Freebuff, Ollama, LM Studio and any OpenAI-compatible server.
   Freebuff needs a CORS header on its API before a browser can call it. The app shows a clear message until then.
 - **Streaming chat.** Answers stream in. Stop keeps the partial text and marks the answer as partial or aborted.

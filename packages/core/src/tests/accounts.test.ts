@@ -2,12 +2,16 @@ import { createMemoryStorage, KeyrigError } from "@keyrig/shared";
 import { describe, expect, it } from "vitest";
 import {
   ACCOUNTS_STORAGE_KEY,
+  accountStorage,
+  createVaultExport,
+  importVault,
   listAccounts,
   normalizeUsername,
   signIn,
   signUp,
   validateUsername,
 } from "../accounts";
+import { VAULT_STORAGE_KEY } from "../vault";
 
 const PASSWORD = "correct horse battery staple";
 const SECRET = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";
@@ -74,6 +78,22 @@ describe("sign up", () => {
     expect(listAccounts(storage)).toHaveLength(1);
   });
 
+  it("refuses a name whose vault outlived the account record, and keeps the vault", async () => {
+    const storage = createMemoryStorage();
+    const first = await signUp({ ...options(storage), username: "alice", password: PASSWORD });
+    await first.vault.addKey({ label: "work", providerId: "openai", secret: SECRET });
+    const vaultStore = accountStorage(storage, "alice");
+    const blob = vaultStore.getItem(VAULT_STORAGE_KEY);
+    expect(blob).not.toBeNull();
+
+    // A lost account record must not free the username or replace the vault.
+    storage.removeItem(ACCOUNTS_STORAGE_KEY);
+    const error = await failureOf(signUp({ ...options(storage), username: "alice", password: "a different long password" }));
+    expect(error.code).toBe("username_taken");
+    expect(vaultStore.getItem(VAULT_STORAGE_KEY)).toBe(blob);
+    expect(storage.getItem(ACCOUNTS_STORAGE_KEY)).toBeNull();
+  });
+
   it("refuses a short password before it writes anything", async () => {
     const storage = createMemoryStorage();
     const error = await failureOf(signUp({ ...options(storage), username: "alice", password: "short" }));
@@ -111,6 +131,92 @@ describe("sign in", () => {
     expect(unknownUser.code).toBe("login_failed");
     expect(wrongPassword.message).toBe(unknownUser.message);
     expect(wrongPassword.category).toBe("auth");
+  });
+});
+
+describe("vault export and import", () => {
+  it("exports the encrypted record and no secret", async () => {
+    const storage = createMemoryStorage();
+    const alice = await signUp({ ...options(storage), username: "alice", password: PASSWORD });
+    await alice.vault.addKey({ label: "work", providerId: "openai", secret: SECRET });
+
+    const file = createVaultExport({
+      username: "alice",
+      vault: alice.vault,
+      now: () => Date.parse("2026-10-29T12:00:00.000Z"),
+    });
+    expect(file.kind).toBe("keyrig.vault-export");
+    expect(file.username).toBe("alice");
+    expect(file.exportedAt).toBe("2026-10-29T12:00:00.000Z");
+
+    const text = JSON.stringify(file);
+    expect(text).not.toContain(SECRET);
+    expect(text).not.toContain("work");
+    expect(text).not.toContain(PASSWORD);
+  });
+
+  it("imports into a fresh address and opens the same keys", async () => {
+    const source = createMemoryStorage();
+    const alice = await signUp({ ...options(source), username: "alice", password: PASSWORD });
+    const view = await alice.vault.addKey({ label: "work", providerId: "openai", secret: SECRET });
+    const file = createVaultExport({ username: "alice", vault: alice.vault });
+
+    const target = createMemoryStorage();
+    const imported = await importVault({ storage: target, file, password: PASSWORD });
+    expect(imported.username).toBe("alice");
+    expect(imported.vault.getSecret(view.id)).toBe(SECRET);
+    expect(listAccounts(target)).toEqual([{ username: "alice", createdAt: expect.any(String) }]);
+
+    // The record carries its own work factor, so a later sign-in also opens it.
+    imported.vault.lock();
+    const again = await signIn({ ...options(target), username: "alice", password: PASSWORD });
+    expect(again.vault.getSecret(view.id)).toBe(SECRET);
+  });
+
+  it("refuses to replace an account that already exists", async () => {
+    const source = createMemoryStorage();
+    const alice = await signUp({ ...options(source), username: "alice", password: PASSWORD });
+    const file = createVaultExport({ username: "alice", vault: alice.vault });
+
+    const target = createMemoryStorage();
+    const existing = await signUp({ ...options(target), username: "alice", password: "another long password" });
+    const existingView = await existing.vault.addKey({ label: "keep", providerId: "openai", secret: SECRET });
+    const before = accountStorage(target, "alice").getItem(VAULT_STORAGE_KEY);
+
+    const error = await failureOf(importVault({ storage: target, file, password: PASSWORD }));
+    expect(error.code).toBe("account_exists");
+    expect(accountStorage(target, "alice").getItem(VAULT_STORAGE_KEY)).toBe(before);
+
+    existing.vault.lock();
+    const again = await signIn({ ...options(target), username: "alice", password: "another long password" });
+    expect(again.vault.getSecret(existingView.id)).toBe(SECRET);
+  });
+
+  it("refuses a wrong password and leaves no account behind", async () => {
+    const source = createMemoryStorage();
+    const alice = await signUp({ ...options(source), username: "alice", password: PASSWORD });
+    const file = createVaultExport({ username: "alice", vault: alice.vault });
+
+    const target = createMemoryStorage();
+    const error = await failureOf(importVault({ storage: target, file, password: "the wrong password" }));
+    expect(error.code).toBe("login_failed");
+    expect(listAccounts(target)).toEqual([]);
+    expect(accountStorage(target, "alice").getItem(VAULT_STORAGE_KEY)).toBeNull();
+  });
+
+  it("refuses a file that is not an export", async () => {
+    const target = createMemoryStorage();
+    const notAFile = await failureOf(importVault({ storage: target, file: { hello: "world" }, password: PASSWORD }));
+    expect(notAFile.code).toBe("import_invalid");
+
+    const wrongVersion = await failureOf(
+      importVault({
+        storage: target,
+        file: { kind: "keyrig.vault-export", version: 2, username: "alice", exportedAt: "x", vault: {} },
+        password: PASSWORD,
+      }),
+    );
+    expect(wrongVersion.code).toBe("import_invalid");
   });
 });
 

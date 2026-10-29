@@ -26,7 +26,8 @@ export type IconName =
   | "route"
   | "bolt"
   | "eyeOff"
-  | "globe";
+  | "globe"
+  | "download";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   chat: <path d="M4 5.5h16v10.5H9l-5 4V5.5Z" />,
@@ -139,6 +140,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M3.5 12h17M12 3.5c2.5 2.6 3.7 5.4 3.7 8.5s-1.2 5.9-3.7 8.5c-2.5-2.6-3.7-5.4-3.7-8.5s1.2-5.9 3.7-8.5Z" />
     </>
   ),
+  download: <path d="M12 4v11M7.5 11.5 12 16l4.5-4.5M5 19.5h14" />,
 };
 
 interface IconProps extends SVGProps<SVGSVGElement> {
