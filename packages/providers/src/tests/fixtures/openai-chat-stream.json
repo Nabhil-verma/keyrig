@@ -1,0 +1,19 @@
+{
+  "name": "openai-chat-stream",
+  "recordedAt": "2026-10-17T00:00:00.000Z",
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "content-type": "text/event-stream" },
+    "chunks": [
+      "data: {\"id\":\"chatcmpl-test-1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\n",
+      "data: {\"id\":\"chatcmpl-test-1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}\n\n",
+      "data: {\"id\":\"chatcmpl-test-1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" from keyrig.\"},\"finish_reason\":null}]}\n\n",
+      "data: {\"id\":\"chatcmpl-test-1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1000,\"completion_tokens\":12,\"total_tokens\":1012,\"prompt_tokens_details\":{\"cached_tokens\":400}}}\n\n",
+      "data: [DONE]\n\n"
+    ]
+  }
+}

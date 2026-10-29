@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="100%" height="100%">
+  <!-- Dark Background Canvas -->
+  <rect width="1024" height="1024" fill="#0E1116" rx="220"/>
+  
+  <!-- Scaled & Centered Key Mark (Scaled by 12.0) -->
+  <g transform="translate(128, 128) scale(12.0)">
+    <!-- Ring -->
+    <circle cx="22" cy="32" r="12" fill="none" stroke="#F5B83D" stroke-width="4"/>
+    <!-- Shaft -->
+    <line x1="34" y1="32" x2="58" y2="32" stroke="#F5B83D" stroke-width="3" stroke-linecap="butt"/>
+    <!-- Uneven Teeth -->
+    <line x1="48" y1="32" x2="48" y2="39" stroke="#F5B83D" stroke-width="2.5" stroke-linecap="butt"/>
+    <line x1="54" y1="32" x2="54" y2="42" stroke="#F5B83D" stroke-width="2.5" stroke-linecap="butt"/>
+    <!-- Hub and 120 deg Links -->
+    <line x1="22" y1="32" x2="34" y2="32" stroke="#3DD6C6" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="22" y1="32" x2="16" y2="42.3923" stroke="#3DD6C6" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="22" y1="32" x2="16" y2="21.6077" stroke="#3DD6C6" stroke-width="1.5" stroke-linecap="round"/>
+    <circle cx="22" cy="32" r="2.5" fill="#3DD6C6"/>
+    <circle cx="34" cy="32" r="1.8" fill="#3DD6C6"/>
+    <circle cx="16" cy="42.3923" r="1.8" fill="#3DD6C6"/>
+    <circle cx="16" cy="21.6077" r="1.8" fill="#3DD6C6"/>
+  </g>
+</svg>

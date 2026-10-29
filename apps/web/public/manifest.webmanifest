@@ -1,0 +1,18 @@
+{
+  "name": "keyrig — BYOK AI harness",
+  "short_name": "keyrig",
+  "description": "One key connects to many AI models. The harness routes each request.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0E1116",
+  "theme_color": "#0E1116",
+  "icons": [
+    {
+      "src": "/brand/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    }
+  ]
+}

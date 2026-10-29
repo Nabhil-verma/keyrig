@@ -1,0 +1,10 @@
+{
+  "name": "openai-401",
+  "recordedAt": "2026-10-17T00:00:00.000Z",
+  "request": { "method": "POST", "url": "https://api.openai.com/v1/chat/completions" },
+  "response": {
+    "status": 401,
+    "headers": { "content-type": "application/json" },
+    "body": "{\"error\":{\"message\":\"Incorrect API key provided. See https://platform.openai.com/account/api-keys\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\"}}"
+  }
+}

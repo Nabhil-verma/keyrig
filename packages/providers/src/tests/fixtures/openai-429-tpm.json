@@ -1,0 +1,10 @@
+{
+  "name": "openai-429-tpm",
+  "recordedAt": "2026-10-17T00:00:00.000Z",
+  "request": { "method": "POST", "url": "https://api.openai.com/v1/chat/completions" },
+  "response": {
+    "status": 429,
+    "headers": { "content-type": "application/json", "retry-after": "2" },
+    "body": "{\"error\":{\"message\":\"Rate limit reached for tokens per minute. Your tokens exceed the limit.\",\"type\":\"tokens\",\"code\":\"rate_limit_exceeded\"}}"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "keyrig",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "keyrig — a BYOK AI harness. One key connects to many models.",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @keyrig/web",
+    "build": "npm run build --workspace @keyrig/web",
+    "test": "vitest run && node tools/check-layers.mjs",
+    "test:watch": "vitest",
+    "fake-provider": "node tools/fake-provider.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.check.json && node tools/check-layers.mjs",
+    "check:layers": "node tools/check-layers.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  }
+}

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="100%" height="100%">
+  <!-- Favicon: Ring + Central Hub Dot for 16px/32px Legibility -->
+  <circle cx="16" cy="16" r="10" fill="none" stroke="#F5B83D" stroke-width="3.5"/>
+  <circle cx="16" cy="16" r="2.5" fill="#3DD6C6"/>
+</svg>
