@@ -48,15 +48,19 @@ rejected for the extra deploy. C was rejected because the owner asked for the mo
 The Sites deployer attaches assets, D1 and R2. It never attaches a Workers AI binding.
 The route therefore calls the Workers AI REST API with `fetch`, not `env.AI`.
 
-Both keyrig environments report `auth: null`. There is no sign-in gate. This design does
-not add one. The caps are the ceiling, and they are a speed bump, not a gate.
+Both keyrig environments report `auth: null`. The first build had no sign-in step, and the
+caps were the only ceiling. The owner then asked for a gate. The route now takes one
+owner-issued access code at `/hosted`, exchanged for a signed HttpOnly cookie. The caps
+still bound the spend. The gate is one shared code, not per-person identity.
 
 ## The route
 
 | Path | Method | Behaviour |
 |---|---|---|
+| `/hosted` | GET | The unlock page. Shows whether this browser is signed in. |
+| `/hosted` | POST | Checks the code, then sets the signed cookie and redirects to `/app`. |
 | `/api/ai/v1/models` | GET | The three models in the OpenAI list shape, or 503 when unconfigured. |
-| `/api/ai/v1/chat/completions` | POST | Checks caps, then forwards an OpenAI-shaped body to Workers AI and returns its stream. |
+| `/api/ai/v1/chat/completions` | POST | Checks the cookie, then the caps, then forwards an OpenAI-shaped body to Workers AI and returns its stream. |
 
 Forward target: `https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/v1/chat/completions`
 with `Authorization: Bearer {CF_AI_TOKEN}`. That endpoint takes a `model` field and
@@ -84,9 +88,13 @@ Stored in D1. The day is UTC. Three counters per request: install, address, site
 
 | Scope | Key | Limit per day |
 |---|---|---|
-| Install | `x-keyrig-install` UUID from the browser | 30 requests |
+| Visitor | the random id inside the signed cookie | 30 requests |
 | Address | SHA-256 of `CF-Connecting-IP` with a salt | 120 requests |
 | Site | one row | 500 requests |
+
+The cookie is `HttpOnly`, `SameSite=Lax`, and lasts 30 days. Its value is
+`id.expires.HMAC`, so a visitor cannot mint an id and cannot skip the code. A wrong code
+is refused with 401 and no cookie is set.
 
 - `max_tokens` is clamped to 700. At 500 requests a day the worst case is 350,000 output
   tokens, about $0.11 on gpt-oss 20B and $0.27 on Qwen3 30B. That is the spend ceiling.
@@ -100,7 +108,8 @@ Stored in D1. The day is UTC. Three counters per request: install, address, site
 |---|---|---|
 | `CF_ACCOUNT_ID` | var | Sites → Secrets |
 | `CF_AI_TOKEN` | secret | Sites → Secrets, scope Workers AI Read + Edit |
-| `HOSTED_IP_SALT` | secret | Sites → Secrets |
+| `HOSTED_IP_SALT` | secret | Sites → Secrets. It keys the cookie signature as well as the address hash |
+| `HOSTED_ACCESS_CODE` | secret | Sites → Secrets. At least 8 characters; 36 random characters is better |
 
 The owner creates the token in the Cloudflare dashboard and puts it in a local file. The
 file is passed to the deploy tool and never read into the chat or the repository.
@@ -135,6 +144,8 @@ The token can spend money on the owner's account. Rotating it is a one-step secr
 - The quota counts three scopes and returns the narrower remaining value.
 - A missing binding returns a 503 code, not a pass-through.
 - The manifest parses and has a unique id.
+- A session round-trips, and an altered, expired or foreign session is refused.
+- A wrong code is refused; the right code sets the cookie; the cookie opens the route.
 - Manual, on the deployed origin: one live answer, then the caps with a small limit.
 
 ## What this changes in the product
@@ -149,6 +160,7 @@ accepted it.
 - The token sits in a public Worker. A bug that echoes it, or a leak, spends the owner's
   money. Scope and rotation are the mitigation.
 - The address cap is bypassable with a proxy pool. The site cap is the real ceiling.
-- The install id is client-generated, so it is a courtesy limit, not a control.
+- The code is shared, so a leak opens the route to anyone who has it. Rotation is one
+  secret change, and rotating it signs every browser out.
 - Workers AI may omit usage, so hosted cost reads as unknown. That is accurate, not a bug.
 - The token needs Workers AI on the owner's plan. That is unverified until the deploy.
