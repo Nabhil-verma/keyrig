@@ -12,6 +12,7 @@ export default {
     if (/\.[a-z0-9]+$/i.test(url.pathname)) {
       return response;
     }
-    return env.ASSETS.fetch(new Request(new URL("/", url).toString(), request));
+    // A new GET for the root. The old request cannot be the init argument.
+    return env.ASSETS.fetch(new Request(new URL("/", url), { method: "GET" }));
   },
 };
