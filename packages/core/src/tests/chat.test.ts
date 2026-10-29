@@ -68,7 +68,7 @@ describe("chat orchestration", () => {
     expect(outcome.result.text).toBe("Hello from keyrig.");
     expect(outcome.cost.pricingKnown).toBe(true);
     expect(outcome.cost.usd).toBeCloseTo((600 / 1e6) * 2.5 + (400 / 1e6) * 0.25 + (12 / 1e6) * 15, 8);
-    expect(outcome.key.label).toBe("work key");
+    expect(outcome.key?.label).toBe("work key");
     expect(outcome.cacheState).toBe("hit");
     expect(outcome.usageEvent.keyLabel).toBe("work key");
     expect(outcome.usageEvent.inputTokens).toBe(600);
@@ -262,5 +262,41 @@ describe("failures", () => {
     expect(outcome.result.text).toBe("Part");
     expect(outcome.result.aborted).toBe(true);
     expect(bus.history()[0]?.stopReason).toBe("aborted");
+  });
+});
+
+describe("a provider that needs no key", () => {
+  const hosted = BUILTIN_MANIFESTS.find(
+    (manifest) => manifest.id === "keyrig-hosted",
+  ) as ProviderManifest;
+
+  it("sends without a key and reports no key label", async () => {
+    const { vault, bus } = await context();
+    const outcome = await sendChat({
+      vault,
+      manifest: hosted,
+      model: hosted.defaultModel,
+      messages: [{ role: "user", content: "Hello" }],
+      bus,
+      fetchImpl: fetchReplay(),
+    });
+    expect(outcome.result.text).toBe("Hello from keyrig.");
+    expect(outcome.key).toBeNull();
+    expect(outcome.usageEvent.keyLabel).toBe("No key");
+    expect(bus.history()[0]?.keyLabel).toBe("No key");
+    expect(outcome.cost.pricingKnown).toBe(false);
+  });
+
+  it("still refuses a provider that needs a key", async () => {
+    const { vault } = await context();
+    await expect(
+      sendChat({
+        vault,
+        manifest: openai,
+        model: "gpt-5.4",
+        messages: [{ role: "user", content: "Hello" }],
+        fetchImpl: fetchReplay(),
+      }),
+    ).rejects.toMatchObject({ code: "key_required" });
   });
 });

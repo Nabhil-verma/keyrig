@@ -21,7 +21,8 @@ import type { UsageBus, UsageEvent } from "./usage";
  */
 export interface SendChatOptions {
   vault: KeyVault;
-  keyId: string;
+  /** Absent for a provider that needs no key, such as the hosted model. */
+  keyId?: string;
   manifest: ProviderManifest;
   model: string;
   messages: readonly ChatMessage[];
@@ -42,7 +43,8 @@ export interface SendChatOptions {
 export interface ChatOutcome {
   result: ChatResult;
   cost: CostEstimate;
-  key: KeyView;
+  /** null when the provider needs no key. */
+  key: KeyView | null;
   usageEvent: UsageEvent;
   cacheState: "hit" | "none";
 }
@@ -59,26 +61,38 @@ function isEmptyReply(result: ChatResult): boolean {
 }
 
 export async function sendChat(options: SendChatOptions): Promise<ChatOutcome> {
-  const { vault, keyId, manifest, model, messages } = options;
+  const { vault, manifest, model, messages } = options;
+  const keyId = options.keyId ?? "";
 
-  const key = vault.getKeyView(keyId);
-  if (!key) {
+  let key: KeyView | null = null;
+  let secret = "";
+
+  if (keyId.length > 0) {
+    key = vault.getKeyView(keyId) ?? null;
+    if (!key) {
+      throw KeyrigError.fromCategory("auth", {
+        code: "key_not_found",
+        message: "keyrig cannot find this key. Add the key again.",
+      });
+    }
+    secret = vault.getSecret(keyId) ?? "";
+    if (!secret) {
+      throw KeyrigError.fromCategory("auth", {
+        code: "key_not_found",
+        message: "keyrig cannot find this key. Add the key again.",
+      });
+    }
+    if (key.providerId !== manifest.id) {
+      throw KeyrigError.fromCategory("invalid_request", {
+        code: "key_provider_mismatch",
+        message: "The key belongs to another provider. Choose a key for this provider.",
+        action: "check_key",
+      });
+    }
+  } else if (manifest.authType === "api-key") {
     throw KeyrigError.fromCategory("auth", {
-      code: "key_not_found",
-      message: "keyrig cannot find this key. Add the key again.",
-    });
-  }
-  const secret = vault.getSecret(keyId);
-  if (!secret) {
-    throw KeyrigError.fromCategory("auth", {
-      code: "key_not_found",
-      message: "keyrig cannot find this key. Add the key again.",
-    });
-  }
-  if (key.providerId !== manifest.id) {
-    throw KeyrigError.fromCategory("invalid_request", {
-      code: "key_provider_mismatch",
-      message: "The key belongs to another provider. Choose a key for this provider.",
+      code: "key_required",
+      message: "This provider needs a key. Add one first.",
       action: "check_key",
     });
   }
@@ -125,7 +139,9 @@ export async function sendChat(options: SendChatOptions): Promise<ChatOutcome> {
 
   const cost = estimateCost(result.usage, options.pricing);
   const at = new Date(options.now?.() ?? Date.now()).toISOString();
-  await vault.markUsed(keyId, Date.parse(at));
+  if (keyId.length > 0) {
+    await vault.markUsed(keyId, Date.parse(at));
+  }
 
   const usageEvent: UsageEvent = {
     id: newId(),
@@ -133,7 +149,7 @@ export async function sendChat(options: SendChatOptions): Promise<ChatOutcome> {
     providerId: manifest.id,
     model: result.model,
     keyId,
-    keyLabel: key.label,
+    keyLabel: key?.label ?? "No key",
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     ...(result.usage.cachedTokens !== undefined ? { cachedTokens: result.usage.cachedTokens } : {}),

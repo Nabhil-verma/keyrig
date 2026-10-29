@@ -111,6 +111,8 @@ export default function App() {
   }, [bus]);
 
   const manifest = (getManifest(enabledManifests, providerId) ?? enabledManifests[0]) as ProviderManifest;
+  /** The hosted model needs no key, because keyrig pays. Every other provider does. */
+  const needsKey = manifest.authType !== "none";
   const models = useMemo(() => (catalog ? modelsForProvider(catalog, providerId) : []), [catalog, providerId]);
   const catalogModel = useMemo(
     () => (catalog ? findModel(catalog, providerId, modelId) : undefined),
@@ -216,7 +218,7 @@ export default function App() {
     ? "Sign in to start."
     : !can(role, "chat.send")
       ? "Your role cannot send prompts. Ask an owner to change your role."
-      : providerKeys.length === 0
+      : needsKey && providerKeys.length === 0
       ? `Add a key for ${manifest.displayName}.`
       : modelId.trim().length === 0
         ? "Choose a model."
@@ -227,15 +229,14 @@ export default function App() {
   const canSend =
     session !== null &&
     can(role, "chat.send") &&
-    providerKeys.length > 0 &&
-    keyId.length > 0 &&
+    (!needsKey || (providerKeys.length > 0 && keyId.length > 0)) &&
     modelId.trim().length > 0 &&
     !customBaseBlocked &&
     !streaming;
 
   const runAssistant = useCallback(
     async (assistantId: string, history: UIMessage[]): Promise<void> => {
-      if (!session || !selectedKey) {
+      if (!session || (needsKey && !selectedKey)) {
         return;
       }
       const controller = new AbortController();
@@ -244,7 +245,7 @@ export default function App() {
       try {
         const outcome = await sendChat({
           vault: session.vault,
-          keyId: selectedKey.id,
+          ...(selectedKey ? { keyId: selectedKey.id } : {}),
           manifest,
           model: modelId.trim(),
           messages: toChatMessages(history),
@@ -270,7 +271,7 @@ export default function App() {
                   content: outcome.result.text,
                   model: modelId,
                   providerId,
-                  keyLabel: outcome.key.label,
+                  keyLabel: outcome.key?.label ?? "No key",
                   costUsd: outcome.cost.usd,
                   pricingKnown: outcome.cost.pricingKnown,
                   inputTokens: outcome.result.usage.inputTokens,
@@ -363,7 +364,7 @@ export default function App() {
   };
 
   const runArena = async (prompt: string, chosen: string[]): Promise<ArenaResult[]> => {
-    if (!session || !selectedKey) {
+    if (!session || (needsKey && !selectedKey)) {
       return [];
     }
     return Promise.all(
@@ -372,7 +373,7 @@ export default function App() {
         try {
           const outcome = await sendChat({
             vault: session.vault,
-            keyId: selectedKey.id,
+            ...(selectedKey ? { keyId: selectedKey.id } : {}),
             manifest,
             model,
             messages: [{ role: "user", content: prompt }],

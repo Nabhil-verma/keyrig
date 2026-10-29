@@ -75,6 +75,24 @@ The tests need no key and no network. Run `npm test`.
 | TS-03 negative cases | `classify.test.ts` and `stream.test.ts` |
 | TS-04 no prompt or path in the error | `stream.test.ts`: "does not put the prompt or a file path in the error text" |
 
+## Hosted model (2026-10-29)
+
+The hosted model is the one route on keyrig's Worker. Its logic is pure, so the tests need no network
+and no token.
+
+| Rule | Test |
+|---|---|
+| The allowlist refuses every other model | `sites-preview/hosted.test.mjs`: "refuses a body that names a model outside the list" |
+| A missing database never runs uncapped | "refuses a call when the database is missing, instead of running uncapped" |
+| A missing install id is refused | "asks for an install id" |
+| The install cap stops the call before it reaches Cloudflare | "returns 429 with a wait when the install reached its limit" |
+| The call is counted and the body is clamped | "counts the call, forwards the allowlisted body and returns the stream" |
+| The token never reaches the response | the same test checks the forwarded header, and the route never copies the upstream body |
+| The site is served while the route is unconfigured | "refuses a call when the site is not configured" and "keeps serving the app and its deep links" |
+| One provider needs no key | `packages/core/src/tests/chat.test.ts`: "sends without a key and reports no key label" |
+| Every other provider still needs a key | `chat.test.ts`: "still refuses a provider that needs a key" |
+| A same-origin path is an allowed base URL | `packages/providers/src/tests/manifest.test.ts`: "allows a same-origin path and still blocks a protocol-relative host" |
+
 ## Browser checks (manual, 2026-10-23)
 
 The web app ran against the local OpenAI-compatible test server (`npm run fake-provider`). It was the

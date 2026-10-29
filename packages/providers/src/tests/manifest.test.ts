@@ -25,6 +25,17 @@ describe("PV-02 provider manifests", () => {
     expect(ids).toEqual(expect.arrayContaining(["openai", "anthropic", "ollama", "lmstudio", "openai-compatible"]));
   });
 
+  it("adds keyrig hosted as a provider that needs no key", () => {
+    const hosted = BUILTIN_MANIFESTS.find((manifest) => manifest.id === "keyrig-hosted");
+    expect(hosted).toBeDefined();
+    expect(hosted?.authType).toBe("none");
+    expect(hosted?.baseUrl).toBe("/api/ai/v1");
+    expect(hosted?.wireFormat).toBe("openai-chat");
+    expect(hosted?.abilities.modelList).toBe(true);
+    expect(hosted?.supportsCustomBaseUrl).toBe(false);
+    expect(checkBaseUrl(hosted?.baseUrl ?? "").allowed).toBe(true);
+  });
+
   it("adds Freebuff as an OpenAI-compatible hosted provider", () => {
     const freebuff = BUILTIN_MANIFESTS.find((manifest) => manifest.id === "freebuff");
     expect(freebuff).toBeDefined();
@@ -86,5 +97,10 @@ describe("KS-07 custom base URL checks", () => {
     const check = checkBaseUrl("https://api.example.com/v1");
     expect(check.allowed).toBe(true);
     expect(check.warning).toBeNull();
+  });
+
+  it("allows a same-origin path and still blocks a protocol-relative host", () => {
+    expect(checkBaseUrl("/api/ai/v1")).toMatchObject({ allowed: true, warning: null });
+    expect(checkBaseUrl("//evil.example/v1").allowed).toBe(false);
   });
 });

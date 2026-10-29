@@ -6,6 +6,11 @@
       "name": "worker.mjs",
       "type": "esm",
       "path": "./worker.mjs"
+    },
+    {
+      "name": "hosted.mjs",
+      "type": "esm",
+      "path": "./hosted.mjs"
     }
   ],
   "assetsDirectory": "./public"

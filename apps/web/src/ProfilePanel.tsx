@@ -157,23 +157,32 @@ export function ProfilePanel({
         </p>
       )}
 
-      <div className="field">
-        <label htmlFor="key">Key</label>
-        <select
-          id="key"
-          className="select"
-          value={keyId}
-          disabled={!canRoute}
-          onChange={(event) => onKeyChange(event.target.value)}
-        >
-          {keys.length === 0 ? <option value="">No key for this provider</option> : null}
-          {keys.map((key) => (
-            <option key={key.id} value={key.id}>
-              {key.label} — {key.last4}
-            </option>
-          ))}
-        </select>
-      </div>
+      {manifest.authType === "none" ? null : (
+        <div className="field">
+          <label htmlFor="key">Key</label>
+          <select
+            id="key"
+            className="select"
+            value={keyId}
+            disabled={!canRoute}
+            onChange={(event) => onKeyChange(event.target.value)}
+          >
+            {keys.length === 0 ? <option value="">No key for this provider</option> : null}
+            {keys.map((key) => (
+              <option key={key.id} value={key.id}>
+                {key.label} — {key.last4}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {manifest.id === "keyrig-hosted" ? (
+        <p className="hint">
+          keyrig pays for this model. The prompt goes to keyrig's Worker, then to Cloudflare. This is the
+          one provider that does not run from your browser.
+        </p>
+      ) : null}
 
       {manifest.supportsCustomBaseUrl ? (
         <div className="field">

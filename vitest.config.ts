@@ -13,7 +13,11 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["packages/**/src/tests/**/*.test.ts", "apps/**/src/**/*.test.ts"],
+    include: [
+      "packages/**/src/tests/**/*.test.ts",
+      "apps/**/src/**/*.test.ts",
+      "sites-preview/**/*.test.mjs",
+    ],
     restoreMocks: true,
   },
 });

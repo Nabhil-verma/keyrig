@@ -14,3 +14,6 @@ playwright-report/
 sites-preview/public/
 .freebuff/*
 !.freebuff/run.md
+
+# Local secret files for the hosted model. Never commit these.
+.secrets/

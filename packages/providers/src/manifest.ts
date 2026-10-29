@@ -86,6 +86,12 @@ function isPrivateHost(host: string): boolean {
 }
 
 export function checkBaseUrl(rawUrl: string, options: { requireHttps?: boolean } = {}): BaseUrlCheck {
+  // A path with one leading slash is same-origin, so it cannot name a host.
+  // The hosted model uses this form on every address the app runs on.
+  if (rawUrl.startsWith("/") && !rawUrl.startsWith("//") && !rawUrl.includes("\\")) {
+    return { allowed: true, warning: null, reason: "ok" };
+  }
+
   let url: URL;
   try {
     url = new URL(rawUrl);

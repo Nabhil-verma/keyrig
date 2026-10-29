@@ -122,6 +122,30 @@ export const BUILTIN_MANIFESTS: readonly ProviderManifest[] = [
     maxTokensField: "max_tokens",
   },
   {
+    // The one provider that runs on keyrig's Worker. It needs no key, because
+    // keyrig pays. The route is same-origin, so the manifest uses a path.
+    id: "keyrig-hosted",
+    displayName: "keyrig hosted",
+    authType: "none",
+    baseUrl: "/api/ai/v1",
+    defaultModel: "@cf/meta/llama-3.1-8b-instruct-fp8",
+    envVars: [],
+    abilities: {
+      streaming: true,
+      tools: false,
+      images: false,
+      reasoning: false,
+      promptCache: false,
+      modelList: true,
+    },
+    wireFormat: "openai-chat",
+    reasoningFormat: "none",
+    docsUrl: "https://developers.cloudflare.com/workers-ai/",
+    supportsCustomBaseUrl: false,
+    priceSource: "none",
+    maxTokensField: "max_tokens",
+  },
+  {
     id: "openai-compatible",
     displayName: "OpenAI-compatible",
     authType: "api-key-optional",
