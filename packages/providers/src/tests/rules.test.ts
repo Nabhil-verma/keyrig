@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_MANIFESTS } from "../builtins";
-import type { ProviderManifest } from "../manifest";
-import { planRequest, type RequestRule } from "../rules";
+import { BUILTIN_MANIFESTS } from "../manifests/builtins";
+import type { ProviderManifest } from "../manifests/manifest";
+import { planRequest, type RequestRule } from "../manifests/rules";
 
 const openai = BUILTIN_MANIFESTS.find((manifest) => manifest.id === "openai") as ProviderManifest;
 const anthropic = BUILTIN_MANIFESTS.find((manifest) => manifest.id === "anthropic") as ProviderManifest;

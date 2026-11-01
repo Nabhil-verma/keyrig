@@ -1,6 +1,6 @@
 import { createMemoryStorage } from "@keyrig/shared";
 import { describe, expect, it, vi } from "vitest";
-import { CATALOG_CACHE_KEY, loadCatalog, parseCatalog } from "../catalog";
+import { CATALOG_CACHE_KEY, loadCatalog, parseCatalog } from "../catalog/catalog";
 
 const payload = {
   openai: {

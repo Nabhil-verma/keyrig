@@ -1,10 +1,10 @@
 import { KeyrigError } from "@keyrig/shared";
-import { readAnthropicStream } from "./adapters/anthropic";
-import { readOllamaStream } from "./adapters/ollama";
-import { readOpenAiStream, type ParsedStream } from "./adapters/openai";
+import { readAnthropicStream } from "../adapters/anthropic";
+import { readOllamaStream } from "../adapters/ollama";
+import { readOpenAiStream, type ParsedStream } from "../adapters/openai";
 import { classifyNetworkFailure, classifyThrown, providerHttpError } from "./classify";
-import { checkBaseUrl, type ProviderManifest } from "./manifest";
-import { planRequest, type RequestRule } from "./rules";
+import { checkBaseUrl, type ProviderManifest } from "../manifests/manifest";
+import { planRequest, type RequestRule } from "../manifests/rules";
 import type { ChatRequest, ChatResult, ProviderCallConfig, StopReason, StreamHandlers } from "./types";
 
 /**

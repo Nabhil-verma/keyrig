@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { Icon } from "../ui/Icon";
+import { Icon } from "./ui/Icon";
 
 /**
  * The setup drawer. The keys, the profile and the roles leave the main screen,

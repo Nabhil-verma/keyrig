@@ -42,8 +42,7 @@ src/
 ├── vite-env.d.ts
 ├── app/            The shell: the entry point, the routes and the page host
 ├── pages/          The four public pages
-├── components/     The workspace panels, cards and drawers
-├── ui/             The brand marks and the icon set
+├── components/     The workspace panels, cards and the ui/ primitives
 ├── stores/         Saved state in this browser
 ├── services/       Calls that leave the app
 ├── lib/            Pure helpers with no saved state
@@ -58,7 +57,21 @@ src/
 | `Site.tsx` | The route host. It loads a page, keeps the workspace mounted and shows the scroll bar. |
 | `SiteChrome.tsx` | The shared header and footer of the public pages. |
 | `router.tsx` | The history router: the `Route` type, `useRoute`, `navigate` and `Link`. |
-| `WorkspaceScreen.tsx` | The `/app` workspace: sign-in, the vault, the route, chat, the arena and the inspector. |
+| `WorkspaceScreen.tsx` | The `/app` workspace. It holds the state and the chat turns. |
+
+### app/workspace/
+
+The workspace screen keeps each large part of its layout in one file here.
+
+| File | What it does |
+|---|---|
+| `WorkspaceHeader.tsx` | The top bar: the brand, the view tabs, the cost and the sign-out button. |
+| `ThreadRail.tsx` | The left rail: the saved chats, the budget meter and the setup links. |
+| `RoutePopover.tsx` | The route popover with the profile panel. |
+| `Inspector.tsx` | The right column: the outbound facts, the files and the tool record. |
+| `SignedOutStage.tsx` | The stage before sign-in. |
+| `useChatTurns.ts` | The chat turns: one answer, one agent turn and the arena run. |
+| `chatTurnHelpers.ts` | The error shape helper and the sent-text filter. |
 
 ### pages/
 
@@ -67,7 +80,8 @@ src/
 | `HomePage.tsx` | The landing page: the product, the routing visual and the call to action. |
 | `ProvidersPage.tsx` | The six built-in providers and their abilities. |
 | `SecurityPage.tsx` | The product rules and the vault rules. |
-| `SettingsPage.tsx` | `/settings`: the theme, the MCP connectors, the skills, the agent tools and the spend. |
+| `SettingsPage.tsx` | `/settings`: the page shell and the section list. |
+| `settings/` | One file for each settings section, with `Section.tsx` as the wrapper. |
 
 ### components/
 
@@ -91,7 +105,7 @@ Each component shows one part of the workspace.
 | `ToolTrace.tsx` | The record of the tool calls under one answer. |
 | `WorkspacePanel.tsx` | The browser workspace: the file list and the editor. |
 
-### ui/
+### components/ui/
 
 | File | What it does |
 |---|---|
@@ -167,47 +181,49 @@ package.
 
 | File | What it does |
 |---|---|
-| `manifest.ts` | The manifest types: auth type, wire format and reasoning format. |
-| `builtins.ts` | The six built-in provider manifests (PV-02). |
-| `catalog.ts` | The model catalog reader and cache (PV-01). |
-| `bundled-catalog.json` | The catalog copy that works with no network. |
-| `rules.ts` | The named rules that turn an intent into a wire plan (PV-03). |
+| `manifests/manifest.ts` | The manifest types: auth type, wire format and reasoning format. |
+| `manifests/builtins.ts` | The six built-in provider manifests (PV-02). |
+| `manifests/rules.ts` | The named rules that turn an intent into a wire plan (PV-03). |
+| `catalog/catalog.ts` | The model catalog reader and cache (PV-01). |
+| `catalog/cost.ts` | The price to the estimated cost (CO-01). |
+| `catalog/models.ts` | The model list request for a provider. |
+| `catalog/bundled-catalog.json` | The catalog copy that works with no network. |
 | `adapters/openai.ts` | The OpenAI chat adapter. |
 | `adapters/anthropic.ts` | The Anthropic messages adapter. |
 | `adapters/ollama.ts` | The Ollama chat adapter. |
-| `stream.ts` | `runChat`: the request, the stream and the usage record. |
-| `sse.ts` | The server-sent event reader and the abort helper. |
-| `classify.ts` | The HTTP status and text map to one error class (KS-06, ER-04). |
-| `cost.ts` | The price to the estimated cost (CO-01). |
-| `models.ts` | The model list request for a provider. |
-| `types.ts` | The neutral content parts: text and image. |
+| `wire/stream.ts` | `runChat`: the request, the stream and the usage record. |
+| `wire/sse.ts` | The server-sent event reader and the abort helper. |
+| `wire/types.ts` | The neutral content parts: text and image. |
+| `wire/classify.ts` | The HTTP status and text map to one error class (KS-06, ER-04). |
 | `tests/fixtures/` | The recorded provider traffic (TS-01). |
 
 ### packages/core
 
 | File | What it does |
 |---|---|
-| `vault.ts` | The encrypted key vault: PBKDF2, AES-GCM, export and import (KS-01, KS-02). |
-| `accounts.ts` | The account records and the password rules on this device. |
-| `identity.ts` | The Google identity and the recovery address rules. |
-| `rbac.ts` | The permission keys, the roles and the role records. |
-| `chat.ts` | `sendChat`: the chat orchestration, the budget check and the usage event. |
-| `prompts.ts` | The system prompt and the guard prompt. |
-| `models.ts` | Load the model list of a provider. |
-| `budget.ts` | The budget limits and the warning ratio (CO-02). |
-| `usage.ts` | The usage bus (CO-04). |
-| `agent.ts` | The agent loop, the events and the approval request. |
-| `tools.ts` | The tool definitions, the risk levels and the protected paths (AS-02, MC-04). |
-| `scene.ts` | The scene schema and its limits. |
-| `github.ts` | The GitHub commit call and the repository rules. |
+| `keys/vault.ts` | The encrypted key vault: PBKDF2, AES-GCM, export and import (KS-01, KS-02). |
+| `identity/accounts.ts` | The account records and the password rules on this device. |
+| `identity/identity.ts` | The Google identity and the recovery address rules. |
+| `identity/rbac.ts` | The permission keys, the roles and the role records. |
+| `chat/chat.ts` | `sendChat`: the chat orchestration, the budget check and the usage event. |
+| `chat/models.ts` | Load the model list of a provider. |
+| `chat/usage.ts` | The usage bus (CO-04). |
+| `chat/budget.ts` | The budget limits and the warning ratio (CO-02). |
+| `chat/scene.ts` | The scene schema and its limits. |
+| `agent/agent.ts` | The agent loop, the events and the approval request. |
+| `agent/tools.ts` | The tool definitions, the risk levels and the protected paths (AS-02, MC-04). |
+| `agent/prompts.ts` | The system prompt and the guard prompt. |
+| `agent/github.ts` | The GitHub commit call and the repository rules. |
 
 ## Where to put a new file
 
 | You add | Go to | Also change |
 |---|---|---|
 | A public page | `apps/web/src/pages/` | `app/router.tsx` and `app/Site.tsx` |
+| A part of the workspace screen | `apps/web/src/app/workspace/` | `WorkspaceScreen.tsx` imports it |
+| A settings section | `apps/web/src/pages/settings/` | `SettingsPage.tsx` shows it |
 | A workspace panel or card | `apps/web/src/components/` | The screen that shows it |
-| A brand primitive or an icon | `apps/web/src/ui/` | Nothing |
+| A brand primitive or an icon | `apps/web/src/components/ui/` | Nothing |
 | A saved record in the browser | `apps/web/src/stores/` | Add a schema version and a test file |
 | A call to a server or an API | `apps/web/src/services/` | Nothing |
 | A pure helper | `apps/web/src/lib/` | Add a test file next to it |

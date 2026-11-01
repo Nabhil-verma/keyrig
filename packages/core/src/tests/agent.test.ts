@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ToolCall } from "@keyrig/providers";
-import { runAgentTurn } from "../agent";
+import { runAgentTurn } from "../agent/agent";
 
 function call(name: string, args: Record<string, unknown>): ToolCall {
   return { id: `call_${name}`, name, arguments: JSON.stringify(args) };

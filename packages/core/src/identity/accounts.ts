@@ -1,5 +1,5 @@
 import { KeyrigError, createDocument, isVersionedDocument, type StorageLike } from "@keyrig/shared";
-import { KeyVault, VAULT_STORAGE_KEY } from "./vault";
+import { KeyVault, VAULT_STORAGE_KEY } from "../keys/vault";
 
 /**
  * Username and password accounts on this device.

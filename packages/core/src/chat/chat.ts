@@ -10,8 +10,8 @@ import {
   type StreamHandlers,
   type ToolSpec,
 } from "@keyrig/providers";
-import { withSystemPrompt } from "./prompts";
-import type { KeyView, KeyVault } from "./vault";
+import { withSystemPrompt } from "../agent/prompts";
+import type { KeyView, KeyVault } from "../keys/vault";
 import type { UsageBus, UsageEvent } from "./usage";
 
 /**

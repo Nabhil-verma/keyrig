@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commitFiles, parseBranch, parseRepo } from "../github";
+import { commitFiles, parseBranch, parseRepo } from "../agent/github";
 
 interface Call {
   url: string;

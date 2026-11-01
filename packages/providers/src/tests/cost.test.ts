@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { estimateCost, formatUsd, selectPrice } from "../cost";
+import { estimateCost, formatUsd, selectPrice } from "../catalog/cost";
 
 describe("CO-01 estimated cost", () => {
   it("adds the input, cached and output parts", () => {

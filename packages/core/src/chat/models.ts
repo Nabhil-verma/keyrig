@@ -1,6 +1,6 @@
 import { KeyrigError } from "@keyrig/shared";
 import { listModels, type ModelListResult, type ProviderManifest } from "@keyrig/providers";
-import type { KeyVault } from "./vault";
+import type { KeyVault } from "../keys/vault";
 
 /**
  * PV-11: read the model list from the provider with the selected key.

@@ -1,6 +1,6 @@
 import { createMemoryStorage, createFullStorage, KeyrigError } from "@keyrig/shared";
 import { describe, expect, it } from "vitest";
-import { KeyVault, VAULT_STORAGE_KEY } from "../vault";
+import { KeyVault, VAULT_STORAGE_KEY } from "../keys/vault";
 
 const PASSPHRASE = "correct horse battery staple";
 const SECRET = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";

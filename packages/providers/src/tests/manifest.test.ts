@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_MANIFESTS } from "../builtins";
-import { checkBaseUrl, envVarFor, joinUrl } from "../manifest";
+import { BUILTIN_MANIFESTS } from "../manifests/builtins";
+import { checkBaseUrl, envVarFor, joinUrl } from "../manifests/manifest";
 
 describe("PV-02 provider manifests", () => {
   it("has every required field and a unique id", () => {

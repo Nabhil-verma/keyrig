@@ -175,7 +175,7 @@ keyrig code/
 │           ├── app/            The shell: the entry, the routes and the page host
 │           ├── pages/          The four public pages
 │           ├── components/     The workspace panels, cards and drawers
-│           ├── ui/             The brand marks and the icon set
+│           │   └── ui/         The brand marks and the icon set
 │           ├── stores/         Saved state in this browser
 │           ├── services/       Calls that leave the app: providers, OAuth, MCP
 │           ├── lib/            Pure helpers with no saved state

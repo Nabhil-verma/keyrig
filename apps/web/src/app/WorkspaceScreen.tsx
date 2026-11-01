@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AccountRecord, AgentApprovalRequest, KeyView, RoleAssignment, RoleId, SignedInAccount } from "@keyrig/core";
 import {
-  GITHUB_TOKEN_NAME,
-  ROLE_LABELS,
   accountStorage,
   assignRole,
   budgetMessage,
@@ -14,9 +12,7 @@ import {
   importVault,
   listAccounts,
   loadProviderModels,
-  parseRepo,
   readAssignments,
-  sendChat,
   signIn,
   signUp,
 } from "@keyrig/core";
@@ -24,33 +20,25 @@ import {
   BUILTIN_MANIFESTS,
   checkBaseUrl,
   findModel,
-  formatUsd,
   getManifest,
   loadCatalog,
   modelsForProvider,
   type Catalog,
   type CatalogSource,
-  type ChatMessage,
   type ProviderManifest,
 } from "@keyrig/providers";
-import { isKeyrigError, toKeyrigError, type KeyrigErrorJSON } from "@keyrig/shared";
 import { ArenaPanel } from "../components/ArenaPanel";
-import { AuthPanel } from "../components/AuthPanel";
 import { ChatPanel } from "../components/ChatPanel";
 import { ConnectionsPanel } from "../components/ConnectionsPanel";
 import { KeyPanel } from "../components/KeyPanel";
-import { OutboundPanel } from "../components/OutboundPanel";
-import { ProfilePanel } from "../components/ProfilePanel";
 import { RolesPanel } from "../components/RolesPanel";
 import { Shelf, type ShelfTab } from "../components/Shelf";
-import { SiteFooter, SiteHeader } from "./SiteChrome";
-import { ToolTrace } from "../components/ToolTrace";
-import { WorkspacePanel } from "../components/WorkspacePanel";
-import { runToolTurn } from "../services/agentRun";
-import { expandContext } from "../lib/composerTokens";
+import { Inspector, type InspectTab } from "./workspace/Inspector";
+import { RoutePopover } from "./workspace/RoutePopover";
+import { SignedOutStage } from "./workspace/SignedOutStage";
+import { ThreadRail } from "./workspace/ThreadRail";
+import { WorkspaceHeader } from "./workspace/WorkspaceHeader";
 import { readConnections, type AccountConnections } from "../stores/connections";
-import { createDeltaBuffer, type DeltaBuffer } from "../lib/deltaBuffer";
-import { Link } from "./router";
 import { readRoute, writeRoute } from "../stores/routeStore";
 import { useSettings, writeSettings } from "../stores/settings";
 import { addSpend, readSpend, utcDay } from "../stores/spendStore";
@@ -67,28 +55,12 @@ import {
 } from "../stores/threads";
 import { activeTools, useAgentSettings } from "../stores/toolSettings";
 import { newId, type ArenaResult, type UIMessage } from "../lib/types";
-import { BrandLockup } from "../ui/BrandLockup";
-import { Icon } from "../ui/Icon";
+import { Icon } from "../components/ui/Icon";
 import { Workspace, type WorkspaceFile } from "../stores/workspace";
+import { safeError } from "./workspace/chatTurnHelpers";
+import { useChatTurns } from "./workspace/useChatTurns";
 
 const storage = browserStorage();
-const INSPECT_TABS: ReadonlyArray<{ id: InspectTab; label: string }> = [
-  { id: "outbound", label: "Outbound" },
-  { id: "files", label: "Files" },
-  { id: "tools", label: "Tools" },
-];
-
-type InspectTab = "outbound" | "files" | "tools";
-
-function safeError(caught: unknown): KeyrigErrorJSON {
-  return isKeyrigError(caught) ? caught.toJSON() : toKeyrigError(caught).toJSON();
-}
-
-function toChatMessages(messages: UIMessage[]): ChatMessage[] {
-  return messages
-    .filter((message) => message.error === undefined && message.content.trim().length > 0)
-    .map((message) => ({ role: message.role, content: message.content }));
-}
 
 export default function App() {
   const settings = useSettings();
@@ -380,372 +352,34 @@ export default function App() {
     !customBaseBlocked &&
     !streaming;
 
-  const runAssistant = useCallback(
-    async (assistantId: string, history: UIMessage[]): Promise<void> => {
-      if (!session || (needsKey && !selectedKey)) {
-        return;
-      }
-      const controller = new AbortController();
-      abortRef.current = controller;
-      setStreaming(true);
-      // PV-08: join the deltas and render once for each frame.
-      const buffer: DeltaBuffer = createDeltaBuffer(
-        (text) => {
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantId ? { ...message, content: message.content + text } : message,
-            ),
-          );
-        },
-        (callback) => {
-          if (typeof requestAnimationFrame === "function") {
-            requestAnimationFrame(callback);
-          } else {
-            setTimeout(callback, 16);
-          }
-        },
-      );
-      try {
-        const outcome = await sendChat({
-          vault: session.vault,
-          ...(selectedKey ? { keyId: selectedKey.id } : {}),
-          manifest,
-          model: modelId.trim(),
-          messages: toChatMessages(history),
-          systemPrompt: systemPromptText,
-          ...(pricing !== undefined ? { pricing } : {}),
-          ...(effectiveBaseUrl !== undefined ? { baseUrl: effectiveBaseUrl } : {}),
-          bus,
-          signal: controller.signal,
-          handlers: {
-            onDelta: (text) => buffer.push(text),
-          },
-        });
-        // The full text replaces the streamed text, so a late flush must not run.
-        buffer.clear();
-        setMessages((current) =>
-          current.map((message) =>
-            message.id === assistantId
-              ? {
-                  ...message,
-                  content: outcome.result.text,
-                  model: modelId,
-                  providerId,
-                  keyLabel: outcome.key?.label ?? "No key",
-                  costUsd: outcome.cost.usd,
-                  pricingKnown: outcome.cost.pricingKnown,
-                  inputTokens: outcome.result.usage.inputTokens,
-                  outputTokens: outcome.result.usage.outputTokens,
-                  ...(outcome.result.usage.cachedTokens !== undefined
-                    ? { cachedTokens: outcome.result.usage.cachedTokens }
-                    : {}),
-                  cacheState: outcome.cacheState,
-                  stopReason: outcome.result.stopReason,
-                }
-              : message,
-          ),
-        );
-      } catch (caught) {
-        // Keep the text that arrived before the failure (PV-08).
-        buffer.flush();
-        const error = safeError(caught);
-        setMessages((current) =>
-          current.map((message) => (message.id === assistantId ? { ...message, error } : message)),
-        );
-      } finally {
-        setStreaming(false);
-        abortRef.current = null;
-        // KS-05: the vault writes the last-used date. Read it back for the key card.
-        setKeys(session.vault.listKeys());
-      }
-    },
-    [session, selectedKey, manifest, modelId, pricing, effectiveBaseUrl, bus, providerId, systemPromptText],
-  );
-
-  /** AS-01: a turn that can call a tool. The loop lives in the core. */
-  const runToolAssistant = useCallback(
-    async (assistantId: string, history: UIMessage[]): Promise<void> => {
-      if (!session || workspace === null || (needsKey && !selectedKey)) {
-        return;
-      }
-      const controller = new AbortController();
-      abortRef.current = controller;
-      setStreaming(true);
-      const buffer: DeltaBuffer = createDeltaBuffer(
-        (text) => {
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantId ? { ...message, content: message.content + text } : message,
-            ),
-          );
-        },
-        (callback) => {
-          if (typeof requestAnimationFrame === "function") {
-            requestAnimationFrame(callback);
-          } else {
-            setTimeout(callback, 16);
-          }
-        },
-      );
-
-      let spent = 0;
-      let pricingKnown = true;
-      let inputTokens = 0;
-      let outputTokens = 0;
-      let keyLabel = selectedKey?.label ?? "No key";
-      let owner = "";
-      let repo = "";
-      if (connections !== null && connections.githubRepo.length > 0) {
-        try {
-          const parsed = parseRepo(connections.githubRepo);
-          owner = parsed.owner;
-          repo = parsed.repo;
-        } catch {
-          owner = "";
-          repo = "";
-        }
-      }
-
-      try {
-        const result = await runToolTurn({
-          messages: toChatMessages(history),
-          enabled: activeTools(agentSettings),
-          autoApproveWrites: agentSettings.autoApproveWrites,
-          signal: controller.signal,
-          workspace,
-          callModel: async (outgoing, tools) => {
-            const outcome = await sendChat({
-              vault: session.vault,
-              ...(selectedKey ? { keyId: selectedKey.id } : {}),
-              manifest,
-              model: modelId.trim(),
-              messages: outgoing,
-              systemPrompt: systemPromptText,
-              ...(tools.length > 0 ? { tools } : {}),
-              ...(pricing !== undefined ? { pricing } : {}),
-              ...(effectiveBaseUrl !== undefined ? { baseUrl: effectiveBaseUrl } : {}),
-              bus,
-              signal: controller.signal,
-              toolRan: true,
-              handlers: { onDelta: (text) => buffer.push(text) },
-            });
-            buffer.flush();
-            spent += outcome.cost.usd;
-            pricingKnown = pricingKnown && outcome.cost.pricingKnown;
-            inputTokens += outcome.result.usage.inputTokens;
-            outputTokens += outcome.result.usage.outputTokens;
-            keyLabel = outcome.key?.label ?? "No key";
-            return { text: outcome.result.text, toolCalls: outcome.result.toolCalls ?? [] };
-          },
-          approve: (request) =>
-            new Promise<"approve" | "deny">((resolve) => {
-              approvalRef.current = resolve;
-              setApproval(request);
-            }),
-          github: {
-            token: session.vault.readInternalSecret(GITHUB_TOKEN_NAME),
-            owner,
-            repo,
-            branch: connections?.githubBranch ?? "main",
-            allowCommit: connections?.commitPermit === true,
-          },
-          onScene: (next) =>
-            setMessages((current) =>
-              current.map((message) => (message.id === assistantId ? { ...message, scene: next } : message)),
-            ),
-          onEvent: (event) => {
-            setMessages((current) =>
-              current.map((message) => {
-                if (message.id !== assistantId) {
-                  return message;
-                }
-                const tools = message.tools ?? [];
-                const index = tools.findIndex((item) => item.id === event.id);
-                const nextTools =
-                  index === -1 ? [...tools, event] : tools.map((item, at) => (at === index ? event : item));
-                return { ...message, tools: nextTools };
-              }),
-            );
-            refreshFiles();
-          },
-        });
-
-        buffer.clear();
-        setMessages((current) =>
-          current.map((message) =>
-            message.id === assistantId
-              ? {
-                  ...message,
-                  content: result.text,
-                  model: modelId,
-                  providerId,
-                  keyLabel,
-                  costUsd: spent,
-                  pricingKnown,
-                  inputTokens,
-                  outputTokens,
-                  stopReason: result.hitLimit ? "limit" : "complete",
-                }
-              : message,
-          ),
-        );
-      } catch (caught) {
-        buffer.flush();
-        const error = safeError(caught);
-        setMessages((current) =>
-          current.map((message) => (message.id === assistantId ? { ...message, error } : message)),
-        );
-      } finally {
-        setStreaming(false);
-        abortRef.current = null;
-        approvalRef.current?.("deny");
-        approvalRef.current = null;
-        setApproval(null);
-        setKeys(session.vault.listKeys());
-        refreshFiles();
-      }
-    },
-    [
-      session,
-      workspace,
-      needsKey,
-      selectedKey,
-      connections,
-      agentSettings,
-      manifest,
-      modelId,
-      pricing,
-      effectiveBaseUrl,
-      bus,
-      providerId,
-      systemPromptText,
-      refreshFiles,
-    ],
-  );
-
-  /** AS-01: answer one approval card. */
-  const decideApproval = (decision: "approve" | "deny"): void => {
-    approvalRef.current?.(decision);
-    approvalRef.current = null;
-    setApproval(null);
-  };
-
-  const send = useCallback(
-    (text: string): void => {
-      const trimmed = text.trim();
-      if (trimmed.length === 0) {
-        return;
-      }
-      // CX-04: `@file` becomes a context block for the model, not for the box.
-      const outgoing = expandContext(trimmed, files);
-      const at = new Date().toISOString();
-      const user: UIMessage = {
-        id: newId(),
-        role: "user",
-        content: outgoing,
-        ...(outgoing !== trimmed ? { display: trimmed } : {}),
-        at,
-      };
-      const assistant: UIMessage = {
-        id: newId(),
-        role: "assistant",
-        content: "",
-        at,
-        model: modelId,
-        providerId,
-        ...(selectedKey ? { keyLabel: selectedKey.label } : {}),
-      };
-      setMessages((current) => [...current, user, assistant]);
-      if (toolsReady) {
-        void runToolAssistant(assistant.id, [...messages, user]);
-      } else {
-        void runAssistant(assistant.id, [...messages, user]);
-      }
-    },
-    [files, messages, modelId, providerId, selectedKey, runAssistant, runToolAssistant, toolsReady],
-  );
-
-  const stop = (): void => {
-    abortRef.current?.abort();
-    approvalRef.current?.("deny");
-    approvalRef.current = null;
-    setApproval(null);
-  };
-
-  const onErrorAction = (action: string, message: UIMessage): void => {
-    if (action === "retry") {
-      const index = messages.findIndex((item) => item.id === message.id);
-      const history = index === -1 ? messages : messages.slice(0, index);
-      setMessages((current) =>
-        current.map((item) => {
-          if (item.id !== message.id) {
-            return item;
-          }
-          const { error: _removed, ...rest } = item;
-          return { ...rest, content: "" };
-        }),
-      );
-      void runAssistant(message.id, history);
-      return;
-    }
-    if (action === "check_key" || action === "check_settings") {
-      setShelf({ open: true, tab: "keys" });
-      return;
-    }
-    if (action === "switch_model") {
-      setRouteOpen(true);
-      return;
-    }
-    if (action === "dismiss") {
-      setMessages((current) => current.filter((item) => item.id !== message.id));
-    }
-  };
-
-  const runArena = async (prompt: string, chosen: string[]): Promise<ArenaResult[]> => {
-    if (!session || (needsKey && !selectedKey)) {
-      return [];
-    }
-    return Promise.all(
-      chosen.map(async (model) => {
-        const started = performance.now();
-        try {
-          const outcome = await sendChat({
-            vault: session.vault,
-            ...(selectedKey ? { keyId: selectedKey.id } : {}),
-            manifest,
-            model,
-            messages: [{ role: "user", content: prompt }],
-            systemPrompt: systemPromptText,
-            ...(catalog?.providers[providerId]?.models[model]?.pricing
-              ? { pricing: catalog.providers[providerId]?.models[model]?.pricing }
-              : {}),
-            ...(effectiveBaseUrl !== undefined ? { baseUrl: effectiveBaseUrl } : {}),
-            bus,
-          });
-          return {
-            model,
-            text: outcome.result.text,
-            durationMs: performance.now() - started,
-            costUsd: outcome.cost.usd,
-            pricingKnown: outcome.cost.pricingKnown,
-            inputTokens: outcome.result.usage.inputTokens,
-            outputTokens: outcome.result.usage.outputTokens,
-          };
-        } catch (caught) {
-          return {
-            model,
-            text: "",
-            durationMs: performance.now() - started,
-            costUsd: 0,
-            pricingKnown: false,
-            inputTokens: 0,
-            outputTokens: 0,
-            error: safeError(caught),
-          };
-        }
-      }),
-    );
-  };
+  const { send, stop, decideApproval, onErrorAction, runArena } = useChatTurns({
+    session,
+    needsKey,
+    selectedKey,
+    manifest,
+    modelId,
+    providerId,
+    pricing,
+    effectiveBaseUrl,
+    catalog,
+    bus,
+    systemPromptText,
+    workspace,
+    connections,
+    agentSettings,
+    messages,
+    files,
+    toolsReady,
+    setMessages,
+    setKeys,
+    setStreaming,
+    setApproval,
+    abortRef,
+    approvalRef,
+    refreshFiles,
+    onOpenKeys: () => setShelf({ open: true, tab: "keys" }),
+    onOpenRoute: () => setRouteOpen(true),
+  });
 
   const pickArenaAnswer = (prompt: string, result: ArenaResult): void => {
     const at = new Date().toISOString();
@@ -945,184 +579,37 @@ export default function App() {
   };
 
   if (session === null) {
-    return (
-      <div className="app">
-        <SiteHeader
-          actions={
-            <span className="status-chip" data-state="locked">
-              <span className="status-dot" />
-              <span>Signed out</span>
-            </span>
-          }
-        />
-
-        <main className="auth-stage">
-          <div className="auth-intro">
-            <span className="hero-badge">
-              <Icon name="shield" size={12} />
-              Keys stay in this browser. They go only to your provider.
-            </span>
-            <h1>
-              One key. <span className="accent">Every model.</span>
-            </h1>
-            <p>
-              keyrig is a BYOK harness. Create an account on this device, add your provider keys once, and route
-              each prompt to the model that fits. Every answer shows its model, its key label and its estimated
-              cost.
-            </p>
-          </div>
-          <AuthPanel onSignUp={handleSignUp} onSignIn={handleSignIn} onImport={handleImport} />
-        </main>
-
-        <SiteFooter />
-      </div>
-    );
+    return <SignedOutStage onSignUp={handleSignUp} onSignIn={handleSignIn} onImport={handleImport} />;
   }
 
   return (
     <div className="ws">
-      <header className="ws-top">
-        <span className="ws-brand">
-          <BrandLockup height={24} />
-        </span>
-
-        <div className="ws-top-tabs" role="tablist" aria-label="View">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "chat"}
-            className="ws-top-tab"
-            onClick={() => setView("chat")}
-          >
-            <Icon name="chat" size={13} />
-            Chat
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "arena"}
-            className="ws-top-tab"
-            onClick={() => setView("arena")}
-          >
-            <Icon name="arena" size={13} />
-            Arena
-          </button>
-        </div>
-
-        <div className="ws-top-actions">
-          <span className="status-chip" data-state="unlocked">
-            <span className="status-dot" />
-            {session.username}
-          </span>
-          <span className="chip mono" title="The cost of this session">
-            {formatUsd(totalCost)}
-          </span>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={theme === "dark" ? "Switch to the light theme" : "Switch to the dark theme"}
-            onClick={() => writeSettings({ theme: theme === "dark" ? "light" : "dark" })}
-          >
-            <Icon name={theme === "dark" ? "sun" : "moon"} size={15} />
-          </button>
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            aria-label={`Sign out of ${session.username}`}
-            onClick={signOut}
-          >
-            <Icon name="lock" size={12} />
-            Sign out
-          </button>
-        </div>
-      </header>
+      <WorkspaceHeader
+        username={session.username}
+        view={view}
+        onView={setView}
+        totalCost={totalCost}
+        theme={theme}
+        onToggleTheme={() => writeSettings({ theme: theme === "dark" ? "light" : "dark" })}
+        onSignOut={signOut}
+      />
 
       <div className="ws-body">
-        <aside className="ws-rail">
-          <button type="button" className="btn btn--primary btn--sm ws-new" onClick={newChat}>
-            <Icon name="plus" size={13} />
-            New chat
-          </button>
-
-          <label className="ws-search">
-            <Icon name="search" size={13} />
-            <input
-              value={search}
-              placeholder="Search chats"
-              aria-label="Search chats"
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </label>
-
-          <ol className="ws-threads">
-            {filteredThreads.map((thread) => (
-              <li key={thread.id}>
-                <button
-                  type="button"
-                  className="ws-thread"
-                  aria-current={thread.id === activeId}
-                  onClick={() => openThread(thread)}
-                >
-                  <span className="ws-thread-title">{thread.title}</span>
-                  <span className="ws-thread-preview">{threadPreview(thread) || "No message yet"}</span>
-                  <span className="ws-thread-meta">
-                    {thread.messages.length} {thread.messages.length === 1 ? "message" : "messages"}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className="ws-thread-del"
-                  aria-label={`Delete ${thread.title}`}
-                  onClick={() => deleteThread(thread.id)}
-                >
-                  <Icon name="trash" size={12} />
-                </button>
-              </li>
-            ))}
-          </ol>
-
-          <div className="ws-budget">
-            <div className="ws-budget-row">
-              <span>{budget.limitUsd === null ? "Today" : "Budget"}</span>
-              <strong className="mono">
-                {budget.limitUsd === null
-                  ? formatUsd(budget.spentUsd)
-                  : `${formatUsd(budget.spentUsd)} / ${formatUsd(budget.limitUsd)}`}
-              </strong>
-            </div>
-            <div className="ws-budget-bar" aria-hidden="true">
-              <span style={{ width: `${Math.min(100, Math.round(budget.ratio * 100))}%` }} />
-            </div>
-            {budgetStop ? (
-              <button type="button" className="btn btn--ghost btn--sm" onClick={() => setOverBudget(true)}>
-                Continue this session
-              </button>
-            ) : null}
-          </div>
-
-          <footer className="ws-rail-foot">
-            <span className="ws-status">
-              <span className="ws-dot" />
-              {session.username}
-              {role ? ` · ${ROLE_LABELS[role]}` : ""}
-            </span>
-            <span className="ws-status">No keyrig server · Telemetry off</span>
-            <div className="ws-rail-buttons">
-              <button type="button" onClick={() => setShelf({ open: true, tab: "keys" })}>
-                Keys
-              </button>
-              <button type="button" onClick={() => setShelf({ open: true, tab: "profile" })}>
-                Profile
-              </button>
-              {role !== null && can(role, "roles.assign") ? (
-                <button type="button" onClick={() => setShelf({ open: true, tab: "roles" })}>
-                  Roles
-                </button>
-              ) : null}
-              <Link to="/settings">Settings</Link>
-            </div>
-          </footer>
-        </aside>
+        <ThreadRail
+          username={session.username}
+          role={role}
+          threads={filteredThreads}
+          activeId={activeId}
+          search={search}
+          onSearch={setSearch}
+          onNewChat={newChat}
+          onOpenThread={openThread}
+          onDeleteThread={deleteThread}
+          budget={budget}
+          budgetStop={budgetStop}
+          onContinue={() => setOverBudget(true)}
+          onOpenShelf={(tab) => setShelf({ open: true, tab })}
+        />
 
         <main className="ws-main">
           <div className="ws-head">
@@ -1150,41 +637,29 @@ export default function App() {
           </div>
 
           {routeOpen ? (
-            <>
-              <button
-                type="button"
-                className="ws-popover-backdrop"
-                aria-label="Close the route panel"
-                onClick={() => setRouteOpen(false)}
-              />
-              <div className="ws-popover" role="dialog" aria-label="Route">
-                <button type="button" className="icon-button ws-close" aria-label="Close" onClick={() => setRouteOpen(false)}>
-                  <Icon name="plus" size={15} />
-                </button>
-                <ProfilePanel
-                  manifests={enabledManifests}
-                  manifest={manifest}
-                  providerId={providerId}
-                  onProviderChange={changeProvider}
-                  modelId={modelId}
-                  onModelChange={setModelId}
-                  models={models}
-                  catalogModel={catalogModel}
-                  keyId={keyId}
-                  keys={providerKeys}
-                  onKeyChange={setKeyId}
-                  baseUrl={baseUrl}
-                  onBaseUrlChange={setBaseUrl}
-                  baseUrlCheck={baseUrlCheck}
-                  catalogSource={catalogSource}
-                  canRoute={can(role, "route.manage")}
-                  providerModels={providerModels}
-                  modelsBusy={modelsBusy}
-                  modelsError={modelsError}
-                  onReloadModels={reloadModels}
-                />
-              </div>
-            </>
+            <RoutePopover
+              onClose={() => setRouteOpen(false)}
+              manifests={enabledManifests}
+              manifest={manifest}
+              providerId={providerId}
+              onProviderChange={changeProvider}
+              modelId={modelId}
+              onModelChange={setModelId}
+              models={models}
+              catalogModel={catalogModel}
+              keyId={keyId}
+              keys={providerKeys}
+              onKeyChange={setKeyId}
+              baseUrl={baseUrl}
+              onBaseUrlChange={setBaseUrl}
+              baseUrlCheck={baseUrlCheck}
+              catalogSource={catalogSource}
+              canRoute={can(role, "route.manage")}
+              providerModels={providerModels}
+              modelsBusy={modelsBusy}
+              modelsError={modelsError}
+              onReloadModels={reloadModels}
+            />
           ) : null}
 
           {catalogWarning !== null ? (
@@ -1224,52 +699,28 @@ export default function App() {
           )}
         </main>
 
-        <aside className="ws-inspect">
-          <div className="ws-tabs" role="tablist" aria-label="Inspector">
-            {INSPECT_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={inspect === tab.id}
-                className="ws-tab"
-                onClick={() => setInspect(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          <div className="ws-inspect-body">
-            {inspect === "outbound" ? (
-              <OutboundPanel
-                provider={manifest.displayName}
-                wireFormat={manifest.wireFormat}
-                endpoint={effectiveBaseUrl ?? manifest.baseUrl}
-                model={modelId}
-                keyLabel={selectedKey?.label ?? (needsKey ? null : "No key")}
-                messageCount={messages.filter((message) => message.error === undefined).length}
-                toolsOn={toolsReady}
-                toolCount={activeToolNames.length}
-                priceIn={pricing?.input ?? null}
-                priceOut={pricing?.output ?? null}
-                spent={budget.spentUsd}
-                limit={budget.limitUsd}
-              />
-            ) : inspect === "files" ? (
-              <WorkspacePanel
-                files={files}
-                onRemove={(path) => {
-                  workspace?.remove(path);
-                  refreshFiles();
-                }}
-              />
-            ) : lastTools.length > 0 ? (
-              <ToolTrace events={lastTools} open />
-            ) : (
-              <p className="hint">No tool ran in this chat. Turn the agent on in Settings to give the model a tool.</p>
-            )}
-          </div>
-        </aside>
+        <Inspector
+          tab={inspect}
+          onTab={setInspect}
+          providerName={manifest.displayName}
+          wireFormat={manifest.wireFormat}
+          endpoint={effectiveBaseUrl ?? manifest.baseUrl}
+          modelId={modelId}
+          keyLabel={selectedKey?.label ?? (needsKey ? null : "No key")}
+          messageCount={messages.filter((message) => message.error === undefined).length}
+          toolsOn={toolsReady}
+          toolCount={activeToolNames.length}
+          priceIn={pricing?.input ?? null}
+          priceOut={pricing?.output ?? null}
+          spent={budget.spentUsd}
+          limit={budget.limitUsd}
+          files={files}
+          onRemoveFile={(path) => {
+            workspace?.remove(path);
+            refreshFiles();
+          }}
+          tools={lastTools}
+        />
       </div>
 
       <Shelf

@@ -1,4 +1,4 @@
-import { Icon } from "../ui/Icon";
+import { Icon } from "./ui/Icon";
 import type { WorkspaceFile } from "../stores/workspace";
 
 /**

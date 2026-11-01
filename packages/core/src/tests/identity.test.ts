@@ -4,7 +4,7 @@ import {
   parseGithubDeviceStart,
   parseGithubToken,
   readGoogleIdToken,
-} from "../identity";
+} from "../identity/identity";
 
 function jwt(claims: Record<string, unknown>): string {
   const encode = (value: object): string => Buffer.from(JSON.stringify(value)).toString("base64url");

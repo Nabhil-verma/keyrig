@@ -8,9 +8,9 @@ import contentFilterFixture from "./fixtures/openai-400-content-filter.json";
 import authFixture from "./fixtures/openai-401.json";
 import openaiFixture from "./fixtures/openai-chat-stream.json";
 import rateLimitFixture from "./fixtures/openai-429-tpm.json";
-import { BUILTIN_MANIFESTS } from "../builtins";
-import type { ProviderManifest } from "../manifest";
-import { runChat } from "../stream";
+import { BUILTIN_MANIFESTS } from "../manifests/builtins";
+import type { ProviderManifest } from "../manifests/manifest";
+import { runChat } from "../wire/stream";
 import type { Fixture } from "./helpers";
 import { fetchAlways, fetchFromFixture, slowStreamResponse, sseData } from "./helpers";
 

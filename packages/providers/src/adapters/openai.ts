@@ -1,6 +1,6 @@
-import { providerStreamError } from "../classify";
-import { isAbortError, readSse } from "../sse";
-import type { StreamHandlers, ToolCall, Usage } from "../types";
+import { providerStreamError } from "../wire/classify";
+import { isAbortError, readSse } from "../wire/sse";
+import type { StreamHandlers, ToolCall, Usage } from "../wire/types";
 
 export interface ParsedStream {
   text: string;

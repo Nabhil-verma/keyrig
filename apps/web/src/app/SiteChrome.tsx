@@ -3,9 +3,9 @@ import { motion } from "framer-motion";
 import { Link, useRoute, type Route } from "./router";
 import { useSettings, writeSettings } from "../stores/settings";
 import type { Theme } from "../lib/theme";
-import { BrandLockup } from "../ui/BrandLockup";
-import { BrandMark } from "../ui/BrandMark";
-import { Icon } from "../ui/Icon";
+import { BrandLockup } from "../components/ui/BrandLockup";
+import { BrandMark } from "../components/ui/BrandMark";
+import { Icon } from "../components/ui/Icon";
 
 const PUBLIC_LINKS: ReadonlyArray<{ to: Route; label: string }> = [
   { to: "/providers", label: "Providers" },

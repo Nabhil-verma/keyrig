@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_SCENE_NODES, emptyScene, parseScene } from "../scene";
+import { MAX_SCENE_NODES, emptyScene, parseScene } from "../chat/scene";
 
 describe("the 3D scene reader", () => {
   it("reads a node and rounds the numbers", () => {

@@ -5,7 +5,7 @@ import {
   buildSystemPrompt,
   normalizeInstructions,
   withSystemPrompt,
-} from "../prompts";
+} from "../agent/prompts";
 
 describe("the guard prompt (AS-06)", () => {
   it("states the key rule and the data rule", () => {

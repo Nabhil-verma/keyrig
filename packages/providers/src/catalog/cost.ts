@@ -1,4 +1,4 @@
-import type { Usage } from "./types";
+import type { Usage } from "../wire/types";
 
 /** USD for one million tokens. The catalog uses the same unit. */
 export interface PriceTier {

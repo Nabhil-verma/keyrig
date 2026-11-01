@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyStatus, providerHttpError, providerStreamError } from "../classify";
+import { classifyStatus, providerHttpError, providerStreamError } from "../wire/classify";
 
 describe("KS-06 auth failures use the HTTP status only", () => {
   it("treats status 401 as auth", () => {

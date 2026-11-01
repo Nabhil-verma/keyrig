@@ -10,8 +10,8 @@ import {
   signIn,
   signUp,
   validateUsername,
-} from "../accounts";
-import { VAULT_STORAGE_KEY } from "../vault";
+} from "../identity/accounts";
+import { VAULT_STORAGE_KEY } from "../keys/vault";
 
 const PASSWORD = "correct horse battery staple";
 const SECRET = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";

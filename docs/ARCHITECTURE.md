@@ -38,7 +38,7 @@ A new provider adds one manifest and one adapter. It does not change `core`.
 ## Error path
 
 1. The adapter reads the HTTP status and a bounded part of the response body.
-2. `providers/src/classify.ts` maps the status and the text to one category (KS-06, ER-04).
+2. `providers/src/wire/classify.ts` maps the status and the text to one category (KS-06, ER-04).
 3. `shared/src/errors.ts` builds the error object (ER-02).
 4. The UI shows the message and the fix action (ER-05).
 

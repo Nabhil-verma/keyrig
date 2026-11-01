@@ -1,6 +1,6 @@
 import { KeyrigError } from "@keyrig/shared";
 import { MAX_COMMIT_CHARS, MAX_COMMIT_FILES, normalizeWorkspacePath, protectedReason } from "./tools";
-import { GITHUB_API_URL } from "./identity";
+import { GITHUB_API_URL } from "../identity/identity";
 
 /**
  * The GitHub commit path (AS-01, AS-02).

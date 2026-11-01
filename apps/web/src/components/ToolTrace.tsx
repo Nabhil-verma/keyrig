@@ -1,5 +1,5 @@
 import { RISK_LABELS, type AgentEvent } from "@keyrig/core";
-import { Icon, type IconName } from "../ui/Icon";
+import { Icon, type IconName } from "./ui/Icon";
 
 /**
  * MC-03: the tool calls of one answer. The section is closed by default, so a

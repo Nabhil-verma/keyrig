@@ -10,7 +10,7 @@ import { writeConnections, type AccountConnections } from "../stores/connections
 import { pollGithubToken, readGithubLogin, requestGoogleIdToken, startGithubDevice } from "../services/oauth";
 import { readOAuthConfig, writeOAuthConfig } from "../stores/oauthConfig";
 import { AGENT_RISK_VERSION, writeAgentSettings } from "../stores/toolSettings";
-import { Icon } from "../ui/Icon";
+import { Icon } from "./ui/Icon";
 
 /**
  * The profile connections of one account.

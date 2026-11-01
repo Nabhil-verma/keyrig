@@ -1,6 +1,6 @@
 import { KeyrigError, createMemoryStorage } from "@keyrig/shared";
 import { describe, expect, it } from "vitest";
-import { signUp } from "../accounts";
+import { signUp } from "../identity/accounts";
 import {
   PERMISSION_KEYS,
   ROLES_STORAGE_KEY,
@@ -11,7 +11,7 @@ import {
   readAssignments,
   revokeRole,
   roleOf,
-} from "../rbac";
+} from "../identity/rbac";
 
 const PASSWORD = "correct horse battery";
 

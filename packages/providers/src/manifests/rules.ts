@@ -1,6 +1,6 @@
 import { KeyrigError } from "@keyrig/shared";
 import { joinUrl, type ProviderManifest, type WireFormat } from "./manifest";
-import type { ChatMessage, ImagePart, ToolSpec } from "./types";
+import type { ChatMessage, ImagePart, ToolSpec } from "../wire/types";
 
 /**
  * PV-03: the data path has three steps.

@@ -1,5 +1,5 @@
 import { RISK_LABELS, type AgentApprovalRequest } from "@keyrig/core";
-import { Icon } from "../ui/Icon";
+import { Icon } from "./ui/Icon";
 
 /**
  * AS-01: one write, one yes. The card sits in the answer stream, so the user

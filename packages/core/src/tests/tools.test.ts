@@ -7,7 +7,7 @@ import {
   requiresApproval,
   specsFor,
   validateToolArguments,
-} from "../tools";
+} from "../agent/tools";
 
 const writeTool = findTool("write_file");
 if (writeTool === undefined) {

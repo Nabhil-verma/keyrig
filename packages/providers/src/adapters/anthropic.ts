@@ -1,6 +1,6 @@
-import { providerStreamError } from "../classify";
-import { isAbortError, readSse } from "../sse";
-import type { StreamHandlers } from "../types";
+import { providerStreamError } from "../wire/classify";
+import { isAbortError, readSse } from "../wire/sse";
+import type { StreamHandlers } from "../wire/types";
 import type { ParsedStream } from "./openai";
 
 /**

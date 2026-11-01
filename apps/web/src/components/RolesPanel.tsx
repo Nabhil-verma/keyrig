@@ -1,6 +1,6 @@
 import type { AccountRecord, RoleAssignment, RoleId } from "@keyrig/core";
 import { ROLE_IDS, ROLE_LABELS, ROLE_RANK } from "@keyrig/core";
-import { Icon } from "../ui/Icon";
+import { Icon } from "./ui/Icon";
 
 interface RolesPanelProps {
   accounts: AccountRecord[];

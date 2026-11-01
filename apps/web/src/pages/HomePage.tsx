@@ -14,8 +14,8 @@ import { BUILTIN_MANIFESTS } from "@keyrig/providers";
 import { SiteFooter, SiteHeader } from "../app/SiteChrome";
 import { Link } from "../app/router";
 import { EASE_OUT, fadeUp, stagger } from "../lib/motion";
-import { BrandMark } from "../ui/BrandMark";
-import { Icon, type IconName } from "../ui/Icon";
+import { BrandMark } from "../components/ui/BrandMark";
+import { Icon, type IconName } from "../components/ui/Icon";
 
 /** The three nodes of the routing visual. Each node has one example answer. */
 const EXAMPLES = [

@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { SiteFooter, SiteHeader } from "../app/SiteChrome";
 import { Link } from "../app/router";
 import { fadeUp, stagger } from "../lib/motion";
-import { Icon } from "../ui/Icon";
+import { Icon } from "../components/ui/Icon";
 
 const PRINCIPLES = [
   {

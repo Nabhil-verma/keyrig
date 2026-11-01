@@ -1,7 +1,7 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { MAX_VAULT_IMPORT_BYTES, MIN_PASSWORD_LENGTH } from "@keyrig/core";
 import { isKeyrigError, toKeyrigError, type KeyrigErrorJSON } from "@keyrig/shared";
-import { Icon } from "../ui/Icon";
+import { Icon } from "./ui/Icon";
 
 type Mode = "signup" | "signin" | "import";
 

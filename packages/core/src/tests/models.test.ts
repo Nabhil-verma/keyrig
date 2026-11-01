@@ -1,8 +1,8 @@
 import { KeyrigError } from "@keyrig/shared";
 import { BUILTIN_MANIFESTS, type ProviderManifest } from "@keyrig/providers";
 import { describe, expect, it } from "vitest";
-import { KeyVault } from "../vault";
-import { loadProviderModels } from "../models";
+import { KeyVault } from "../keys/vault";
+import { loadProviderModels } from "../chat/models";
 
 const PASSPHRASE = "correct horse battery";
 const SECRET = "sk-local-test-abcdefghijklmnop";

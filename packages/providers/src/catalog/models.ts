@@ -1,7 +1,7 @@
 import { KeyrigError } from "@keyrig/shared";
-import { classifyNetworkFailure, providerHttpError } from "./classify";
-import { checkBaseUrl, joinUrl, type ProviderManifest } from "./manifest";
-import type { ProviderCallConfig } from "./types";
+import { classifyNetworkFailure, providerHttpError } from "../wire/classify";
+import { checkBaseUrl, joinUrl, type ProviderManifest } from "../manifests/manifest";
+import type { ProviderCallConfig } from "../wire/types";
 
 /**
  * PV-11: read the model list from the provider when its manifest allows it.

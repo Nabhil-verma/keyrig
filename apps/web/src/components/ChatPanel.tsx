@@ -10,8 +10,8 @@ import { applyToken, findToken } from "../lib/composerTokens";
 import { takePendingPrompt, USE_PROMPT_EVENT } from "../lib/pendingPrompt";
 import { listSkills } from "../stores/skills";
 import type { UIMessage } from "../lib/types";
-import { BrandMark } from "../ui/BrandMark";
-import { Icon } from "../ui/Icon";
+import { BrandMark } from "./ui/BrandMark";
+import { Icon } from "./ui/Icon";
 import type { WorkspaceFile } from "../stores/workspace";
 
 interface ChatPanelProps {

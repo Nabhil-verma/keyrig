@@ -4,7 +4,7 @@ import { formatUsd, type CatalogModel } from "@keyrig/providers";
 import { ErrorCard } from "./ErrorCard";
 import { fadeUp, stagger } from "../lib/motion";
 import type { ArenaResult } from "../lib/types";
-import { Icon } from "../ui/Icon";
+import { Icon } from "./ui/Icon";
 
 interface ArenaPanelProps {
   models: CatalogModel[];

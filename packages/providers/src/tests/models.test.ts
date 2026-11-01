@@ -1,8 +1,8 @@
 import { KeyrigError } from "@keyrig/shared";
 import { describe, expect, it } from "vitest";
-import { BUILTIN_MANIFESTS } from "../builtins";
-import type { ProviderManifest } from "../manifest";
-import { listModels, readModelList } from "../models";
+import { BUILTIN_MANIFESTS } from "../manifests/builtins";
+import type { ProviderManifest } from "../manifests/manifest";
+import { listModels, readModelList } from "../catalog/models";
 
 const openai = BUILTIN_MANIFESTS.find((manifest) => manifest.id === "openai") as ProviderManifest;
 const compatible = BUILTIN_MANIFESTS.find((manifest) => manifest.id === "openai-compatible") as ProviderManifest;

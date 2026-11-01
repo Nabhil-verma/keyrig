@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetMessage, budgetState, normalizeBudgetLimit, normalizeSpend } from "../budget";
+import { budgetMessage, budgetState, normalizeBudgetLimit, normalizeSpend } from "../chat/budget";
 
 describe("the daily budget (CO-02)", () => {
   it("stays off when there is no limit", () => {

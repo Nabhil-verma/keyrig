@@ -5,10 +5,10 @@ import {
   type Pricing,
 } from "@keyrig/providers";
 import { describe, expect, it } from "vitest";
-import { sendChat } from "../chat";
-import { buildSystemPrompt } from "../prompts";
-import { createUsageBus } from "../usage";
-import { KeyVault } from "../vault";
+import { sendChat } from "../chat/chat";
+import { buildSystemPrompt } from "../agent/prompts";
+import { createUsageBus } from "../chat/usage";
+import { KeyVault } from "../keys/vault";
 
 const KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";
 const PASSPHRASE = "correct horse battery staple";

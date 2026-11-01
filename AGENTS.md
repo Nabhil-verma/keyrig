@@ -29,6 +29,33 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Run `npm run check:layers` after you add an import across packages.
 
+## File layout
+
+Read [docs/MAP.md](docs/MAP.md). Put each new file in the folder that names its role.
+Do not add a source file to the top of `apps/web/src`.
+
+| Folder | Holds |
+|---|---|
+| `apps/web/src/app/` | The shell, the router and the page host |
+| `apps/web/src/app/workspace/` | One large part of the workspace screen |
+| `apps/web/src/pages/` | A public page |
+| `apps/web/src/pages/settings/` | One section of the settings page |
+| `apps/web/src/components/` | A panel, a card or a drawer |
+| `apps/web/src/components/ui/` | A brand mark or an icon |
+| `apps/web/src/stores/` | A record that this browser saves |
+| `apps/web/src/services/` | A call that leaves the app |
+| `apps/web/src/lib/` | A pure helper |
+| `apps/web/src/styles/` | A stylesheet |
+| `packages/shared/src/` | The error shape, redaction and schema versions |
+| `packages/providers/src/catalog/` | The model catalog, the prices and the model list |
+| `packages/providers/src/manifests/` | The provider manifests and the named rules |
+| `packages/providers/src/wire/` | The stream, the types and the error classification |
+| `packages/providers/src/adapters/` | One wire format for each provider |
+| `packages/core/src/identity/` | The accounts, the identity and the roles |
+| `packages/core/src/keys/` | The key vault |
+| `packages/core/src/agent/` | The agent loop, the tools, the prompt and the commit call |
+| `packages/core/src/chat/` | The chat turn, the model list, the usage and the budget |
+
 ## Key safety
 
 - Do not write a key, a key fragment or a request header to a log, a file, a test, an export, a chat message or a telemetry event.
