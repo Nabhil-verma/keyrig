@@ -1,9 +1,13 @@
+import type { AgentEvent, KeyrigScene } from "@keyrig/core";
 import type { KeyrigErrorJSON } from "@keyrig/shared";
 
 export interface UIMessage {
   id: string;
   role: "user" | "assistant";
+  /** The text that goes to the model. It can hold the context blocks of CX-04. */
   content: string;
+  /** What the user typed, when content holds extra context. */
+  display?: string;
   at: string;
   model?: string;
   providerId?: string;
@@ -16,6 +20,10 @@ export interface UIMessage {
   cacheState?: "hit" | "none";
   stopReason?: string;
   error?: KeyrigErrorJSON;
+  /** MC-03: the tool calls of this answer. */
+  tools?: AgentEvent[];
+  /** AS-04: the scene that keyrig rendered for this answer. */
+  scene?: KeyrigScene;
 }
 
 export interface ArenaResult {

@@ -1,6 +1,14 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const PASSWORD = "keyrig-move-password";
+
+/** The key vault lives in the setup drawer, so each step opens it. */
+async function openKeys(page: Page): Promise<void> {
+  if ((await page.locator(".ws-shelf").count()) === 0) {
+    await page.getByRole("button", { name: "Keys", exact: true }).click();
+  }
+  await expect(page.locator("#key-provider")).toBeVisible();
+}
 
 test("exports the encrypted vault and imports it on a cleared origin", async ({ page }) => {
   const username = `move${Date.now().toString(36)}`;
@@ -11,8 +19,8 @@ test("exports the encrypted vault and imports it on a cleared origin", async ({ 
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByLabel("Repeat the password").fill(PASSWORD);
   await page.locator(".auth-submit").click();
-  await expect(page.locator("#key-provider")).toBeVisible();
 
+  await openKeys(page);
   await page.locator("#key-provider").selectOption("openai-compatible");
   await page.locator("#key-label").fill("Moved key");
   await page.locator("#key-secret").fill("local-test-key");
@@ -39,7 +47,7 @@ test("exports the encrypted vault and imports it on a cleared origin", async ({ 
   await page.getByLabel("Vault password").fill(PASSWORD);
   await page.locator(".auth-submit").click();
 
-  await expect(page.locator("#key-provider")).toBeVisible();
+  await openKeys(page);
   await expect(page.locator(".status-chip")).toContainText(username);
   await expect(page.locator("#vault-body .key-card")).toHaveCount(1);
   await expect(page.locator("#vault-body .key-card")).toContainText("Moved key");

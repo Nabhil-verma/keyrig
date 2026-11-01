@@ -1,6 +1,6 @@
 import { KeyrigError } from "@keyrig/shared";
 import { joinUrl, type ProviderManifest, type WireFormat } from "./manifest";
-import type { ChatMessage, ImagePart } from "./types";
+import type { ChatMessage, ImagePart, ToolSpec } from "./types";
 
 /**
  * PV-03: the data path has three steps.
@@ -18,6 +18,8 @@ export interface ChatIntent {
   maxTokens?: number;
   temperature?: number;
   promptCache?: boolean;
+  /** AS-01: the tools that the model can ask for. */
+  tools?: readonly ToolSpec[];
 }
 
 export interface PlanContext {
@@ -59,6 +61,34 @@ function openAiContent(message: ChatMessage): unknown {
   );
 }
 
+/**
+ * AS-01: an OpenAI-compatible request carries tools, the calls of an assistant
+ * and the result of a tool. The core validates every call before it runs.
+ */
+function openAiMessages(messages: readonly ChatMessage[]): Array<Record<string, unknown>> {
+  return messages.map((message) => {
+    if (message.role === "tool") {
+      return {
+        role: "tool",
+        tool_call_id: message.toolCallId ?? "",
+        content: typeof message.content === "string" ? message.content : textOnly([message]),
+      };
+    }
+    if (message.role === "assistant" && message.toolCalls !== undefined && message.toolCalls.length > 0) {
+      return {
+        role: "assistant",
+        content: typeof message.content === "string" && message.content.length > 0 ? message.content : null,
+        tool_calls: message.toolCalls.map((call) => ({
+          id: call.id,
+          type: "function",
+          function: { name: call.name, arguments: call.arguments },
+        })),
+      };
+    }
+    return { role: message.role, content: openAiContent(message) };
+  });
+}
+
 function anthropicContent(message: ChatMessage): unknown {
   if (typeof message.content === "string") {
     return message.content;
@@ -92,14 +122,21 @@ export const openAiChatRule: RequestRule = {
       },
       body: {
         model: context.model,
-        messages: context.intent.messages.map((message) => ({
-          role: message.role,
-          content: openAiContent(message),
-        })),
+        messages: openAiMessages(context.intent.messages),
         stream: context.intent.stream,
         ...(context.intent.stream ? { stream_options: { include_usage: true } } : {}),
         ...(context.intent.maxTokens !== undefined ? { [field]: context.intent.maxTokens } : {}),
         ...(context.intent.temperature !== undefined ? { temperature: context.intent.temperature } : {}),
+        // A provider that does not take tools never sees this field.
+        ...(context.intent.tools !== undefined && context.intent.tools.length > 0 && context.manifest.abilities.tools
+          ? {
+              tools: context.intent.tools.map((tool) => ({
+                type: "function",
+                function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+              })),
+              tool_choice: "auto",
+            }
+          : {}),
       },
     };
   },
@@ -139,7 +176,11 @@ export const anthropicMessagesRule: RequestRule = {
         ...(context.intent.temperature !== undefined ? { temperature: context.intent.temperature } : {}),
         messages: context.intent.messages
           .filter((message) => message.role !== "system")
-          .map((message) => ({ role: message.role, content: anthropicContent(message) })),
+          .map((message) => ({
+            // A tool result is plain text here. This provider gets no tool list.
+            role: message.role === "tool" ? "user" : message.role,
+            content: anthropicContent(message),
+          })),
       },
     };
   },
@@ -166,7 +207,7 @@ export const ollamaChatRule: RequestRule = {
         model: context.model,
         stream: context.intent.stream,
         messages: context.intent.messages.map((message) => ({
-          role: message.role,
+          role: message.role === "tool" ? "user" : message.role,
           content: typeof message.content === "string" ? message.content : textOnly([message]),
           ...(Array.isArray(message.content)
             ? {

@@ -1,8 +1,8 @@
 import { motion } from "framer-motion";
 import { BUILTIN_MANIFESTS, type ProviderManifest } from "@keyrig/providers";
-import { SiteFooter, SiteHeader } from "../SiteChrome";
-import { Link } from "../router";
-import { fadeUp, stagger } from "../motion";
+import { SiteFooter, SiteHeader } from "../app/SiteChrome";
+import { Link } from "../app/router";
+import { fadeUp, stagger } from "../lib/motion";
 import { Icon } from "../ui/Icon";
 
 const AUTH_LABEL: Record<ProviderManifest["authType"], string> = {

@@ -316,3 +316,55 @@ The preview ran on a public HTTPS origin with the production build and the Worke
 - Roles: pass. The first account became the owner and saw the Roles panel. A second account became a
   viewer with the composer blocked and the key and route fields disabled. The owner granted the member
   role. The second account then had the member access and the panel stayed hidden.
+
+## Guard prompt, budget and streaming (2026-11-01)
+
+| Rule | Test |
+|---|---|
+| AS-06 the guard prompt states the key rule and the data rule | `packages/core/src/tests/prompts.test.ts`: "states the key rule and the data rule" |
+| AS-06 the tool rules appear only with a tool | `prompts.test.ts`: "adds the tool rules only when a tool can run" |
+| AS-06 the prompt goes first and is never sent twice | `prompts.test.ts`: "puts the prompt first and never adds it twice"; `chat.test.ts`: "sends the guard prompt first and keeps the user turn after it" |
+| AS-06 and KS-03 a key in the user block is masked | `prompts.test.ts`: "masks a key in the user block"; `chat.test.ts`: "does not send a key that a user pasted into the instructions" |
+| CO-02 the warning at 80 percent and the stop at 100 percent | `packages/core/src/tests/budget.test.ts`: "warns at 80 percent and stops at 100 percent" |
+| CO-02 the day record keeps the spend across a reload | `apps/web/src/spendStore.test.ts`: "adds the costs of the day" |
+| PV-08 one render for each frame, not for each token | `apps/web/src/deltaBuffer.test.ts`: "joins many deltas into one flush per frame" |
+
+## Performance (2026-11-01)
+
+The build splits the frameworks from the app code. Measure a change to the hot path with a test, not
+by eye.
+
+| Check | Command |
+|---|---|
+| One render for each frame of a stream | `apps/web/src/deltaBuffer.test.ts` |
+| The chunk sizes | `npm run build` |
+
+## Agent tools, approvals and connections (2026-11-01)
+
+| Rule | Test |
+|---|---|
+| AS-01 the loop runs a tool and returns the final text | `packages/core/src/tests/agent.test.ts`: "runs a tool, sends the result back and returns the final text" |
+| AS-01 a deny stops the call | `agent.test.ts`: "does not run a tool that the user denied" |
+| AS-01 a disabled tool never runs and never asks | `agent.test.ts`: "does not ask, and does not run, a tool that the user did not enable" |
+| MC-05 a broken call is blocked before the approval | `agent.test.ts`: "blocks a call with a missing field before the approval" |
+| AS-01 the loop stops at the step limit | `agent.test.ts`: "stops at the step limit, so a model cannot run forever" |
+| AS-01 a tool failure goes back to the model | `agent.test.ts`: "reports a tool failure to the model and keeps the turn alive" |
+| AS-01 a tool that cannot run now is blocked with a reason | `agent.test.ts`: "stops a call to a tool that cannot run now" |
+| AS-01 a stopped turn starts nothing | `agent.test.ts`: "does not start when the user stopped the turn" |
+| AS-02 a path must stay inside the workspace | `tools.test.ts`: "refuses an absolute path"; "refuses a path that climbs out of the workspace" |
+| AS-02 key files, dot env files and secret-like names are protected | `tools.test.ts`: "protects a dot env file, a key file, a key folder and a token name"; `apps/web/src/workspace.test.ts`: "refuses a protected path (AS-02)" |
+| MC-05 an unknown field, a missing field, bad JSON or a wrong type is an error | `tools.test.ts`: "refuses an unknown field"; "refuses a missing field"; "refuses text that is not JSON"; "refuses a value of the wrong type" |
+| MC-04 every tool states its effect | `tools.test.ts`: "states the effect of each tool (MC-04)" |
+| AS-01 a read needs no yes, a write asks, a delete and a commit always ask | `tools.test.ts`: "runs a read with no question"; "asks before a write unless the user turned auto approval on"; "always asks for a delete and for a commit" |
+| AS-01 only the enabled tools go to the provider | `tools.test.ts`: "sends only the tools that the user turned on" |
+| AS-04 the scene reader keeps a valid scene and refuses a broken one | `packages/core/src/tests/scene.test.ts`: all cases |
+| AS-02 a commit refuses a protected path and an empty commit | `packages/core/src/tests/github.test.ts`: "refuses a protected file before it calls GitHub"; "refuses an empty commit" |
+| AS-01 a commit writes a blob, a tree and a commit, then moves the branch | `github.test.ts`: "writes one blob, one tree and one commit, then moves the branch" |
+| KS-03 a GitHub error holds no token | `github.test.ts`: "reports a rejected token without the token in the message" |
+| The recovery email is a Gmail address | `packages/core/src/tests/identity.test.ts`: "refuses another domain"; "reads a verified Gmail token" |
+| The Google token must match the client id, the expiry and the verified address | `identity.test.ts`: "refuses another client id"; "refuses an expired token"; "refuses an address that Google did not verify" |
+| The GitHub device flow reads a code and a token | `identity.test.ts`: "reads a device code"; "reads a token and a pending answer" |
+| The workspace keeps, replaces, searches and limits a file | `apps/web/src/workspace.test.ts`: all cases |
+| The agent is off until the user reads the risk list | `apps/web/src/toolSettings.test.ts`: "gives no tool before the user reads the risk list"; "gives the tools after the user reads the risk list" |
+| A commit needs a connected account and a repository | `apps/web/src/connections.test.ts`: "needs a login and a repository before a commit is allowed" |
+| three.js loads only for a scene | `npm run build` shows `three` in its own chunk, and `apps/web/dist/index.html` preloads only the entry, the runtime, React and the motion library. |

@@ -1,5 +1,5 @@
-import { checkConnectorUrl } from "./connectors";
-import { normalizeTools, type Connector, type ConnectorTool } from "./connectors";
+import { checkConnectorUrl } from "../stores/connectors";
+import { normalizeTools, type Connector, type ConnectorTool } from "../stores/connectors";
 
 /**
  * A small MCP client over the Streamable HTTP transport: one JSON-RPC POST per

@@ -21,6 +21,7 @@ export async function readOllamaStream(
     reasoning: "",
     usage: { inputTokens: 0, outputTokens: 0 },
     finishReason: null,
+    toolCalls: [],
     sawEnd: false,
     part: false,
   };

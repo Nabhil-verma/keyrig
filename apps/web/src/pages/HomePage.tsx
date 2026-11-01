@@ -11,9 +11,9 @@ import {
   useTransform,
 } from "framer-motion";
 import { BUILTIN_MANIFESTS } from "@keyrig/providers";
-import { SiteFooter, SiteHeader } from "../SiteChrome";
-import { Link } from "../router";
-import { EASE_OUT, fadeUp, stagger } from "../motion";
+import { SiteFooter, SiteHeader } from "../app/SiteChrome";
+import { Link } from "../app/router";
+import { EASE_OUT, fadeUp, stagger } from "../lib/motion";
 import { BrandMark } from "../ui/BrandMark";
 import { Icon, type IconName } from "../ui/Icon";
 

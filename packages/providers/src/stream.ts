@@ -81,6 +81,7 @@ export async function runChat(options: RunChatOptions): Promise<ChatResult> {
         ...(request.maxTokens !== undefined ? { maxTokens: request.maxTokens } : {}),
         ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
         ...(request.promptCache !== undefined ? { promptCache: request.promptCache } : {}),
+        ...(request.tools !== undefined ? { tools: request.tools } : {}),
       },
     },
     options.rules,
@@ -186,6 +187,7 @@ export async function runChat(options: RunChatOptions): Promise<ChatResult> {
     model: request.model,
     providerId: manifest.id,
     ...(parsed.requestId !== undefined ? { requestId: parsed.requestId } : {}),
+    ...(parsed.toolCalls.length > 0 ? { toolCalls: parsed.toolCalls } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   };
 }

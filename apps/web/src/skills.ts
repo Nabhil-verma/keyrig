@@ -1,5 +1,5 @@
 import { createDocument, isVersionedDocument, type StorageLike } from "@keyrig/shared";
-import { browserStorage } from "./storage";
+import { browserStorage } from "../lib/storage";
 
 /**
  * A skill is a saved prompt. The person adds it once and uses it in any chat.

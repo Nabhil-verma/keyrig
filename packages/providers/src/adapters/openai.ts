@@ -1,6 +1,6 @@
 import { providerStreamError } from "../classify";
 import { isAbortError, readSse } from "../sse";
-import type { StreamHandlers, Usage } from "../types";
+import type { StreamHandlers, ToolCall, Usage } from "../types";
 
 export interface ParsedStream {
   text: string;
@@ -8,6 +8,8 @@ export interface ParsedStream {
   usage: Usage;
   finishReason: string | null;
   requestId?: string;
+  /** AS-01: the calls that the model asked for. */
+  toolCalls: ToolCall[];
   sawEnd: boolean;
   part: boolean;
 }
@@ -19,11 +21,22 @@ interface OpenAiUsage {
   completion_tokens_details?: { reasoning_tokens?: number };
 }
 
+interface OpenAiToolCallDelta {
+  index?: number;
+  id?: string;
+  function?: { name?: string; arguments?: string };
+}
+
 interface OpenAiChunk {
   id?: string;
   error?: { message?: string; type?: string; code?: string };
   choices?: Array<{
-    delta?: { content?: string | null; reasoning_content?: string | null; reasoning?: string | null };
+    delta?: {
+      content?: string | null;
+      reasoning_content?: string | null;
+      reasoning?: string | null;
+      tool_calls?: OpenAiToolCallDelta[];
+    };
     finish_reason?: string | null;
   }>;
   usage?: OpenAiUsage | null;
@@ -50,8 +63,37 @@ export async function readOpenAiStream(
     reasoning: "",
     usage: { inputTokens: 0, outputTokens: 0 },
     finishReason: null,
+    toolCalls: [],
     sawEnd: false,
     part: false,
+  };
+
+  // A provider sends one call in parts. Join the parts by index before the end.
+  const partial = new Map<number, { id: string; name: string; arguments: string }>();
+  const collect = (delta: OpenAiToolCallDelta): void => {
+    const index = delta.index ?? 0;
+    const current = partial.get(index) ?? { id: "", name: "", arguments: "" };
+    if (typeof delta.id === "string" && delta.id.length > 0) {
+      current.id = delta.id;
+    }
+    if (typeof delta.function?.name === "string" && delta.function.name.length > 0) {
+      current.name = current.name.length === 0 ? delta.function.name : current.name + delta.function.name;
+    }
+    if (typeof delta.function?.arguments === "string") {
+      current.arguments += delta.function.arguments;
+    }
+    partial.set(index, current);
+  };
+
+  const flush = (): void => {
+    state.toolCalls = [...partial.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([index, call]) => ({
+        id: call.id.length > 0 ? call.id : `call_${index}`,
+        name: call.name,
+        arguments: call.arguments.length > 0 ? call.arguments : "{}",
+      }))
+      .filter((call) => call.name.length > 0);
   };
 
   try {
@@ -81,6 +123,11 @@ export async function readOpenAiStream(
         state.finishReason = choice.finish_reason;
       }
       const delta = choice?.delta;
+      if (delta?.tool_calls !== undefined) {
+        for (const call of delta.tool_calls) {
+          collect(call);
+        }
+      }
       const text = delta?.content;
       if (typeof text === "string" && text.length > 0) {
         state.text += text;
@@ -99,6 +146,7 @@ export async function readOpenAiStream(
     state.part = true;
   }
 
+  flush();
   if (!state.sawEnd && state.finishReason === null) {
     state.part = true;
   }

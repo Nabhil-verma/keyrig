@@ -2,9 +2,9 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { formatUsd, type CatalogModel } from "@keyrig/providers";
 import { ErrorCard } from "./ErrorCard";
-import { fadeUp, stagger } from "./motion";
-import type { ArenaResult } from "./types";
-import { Icon } from "./ui/Icon";
+import { fadeUp, stagger } from "../lib/motion";
+import type { ArenaResult } from "../lib/types";
+import { Icon } from "../ui/Icon";
 
 interface ArenaPanelProps {
   models: CatalogModel[];

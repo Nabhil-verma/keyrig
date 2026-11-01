@@ -27,7 +27,10 @@ export type IconName =
   | "bolt"
   | "eyeOff"
   | "globe"
-  | "download";
+  | "download"
+  | "search"
+  | "file"
+  | "settings";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   chat: <path d="M4 5.5h16v10.5H9l-5 4V5.5Z" />,
@@ -141,6 +144,24 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   download: <path d="M12 4v11M7.5 11.5 12 16l4.5-4.5M5 19.5h14" />,
+  search: (
+    <>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="M16 16l4.5 4.5" />
+    </>
+  ),
+  file: (
+    <>
+      <path d="M6 3.5h7l5 5v12H6V3.5Z" />
+      <path d="M13 3.5v5h5" />
+    </>
+  ),
+  settings: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8" />
+    </>
+  ),
 };
 
 interface IconProps extends SVGProps<SVGSVGElement> {

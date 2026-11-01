@@ -9,6 +9,12 @@ import { KeyrigError, createDocument, isVersionedDocument, type StorageLike } fr
  */
 
 export const VAULT_STORAGE_KEY = "keyrig.vault.v1";
+/**
+ * A record for a secret that is not a provider key. keyrig uses it for the
+ * GitHub token. It lives in the same encrypted blob and it never appears in
+ * the key list.
+ */
+export const AUX_PROVIDER_ID = "keyrig.internal";
 export const VAULT_SCHEMA_VERSION = 1;
 export const PBKDF2_ITERATIONS = 600_000;
 
@@ -224,19 +230,68 @@ export class KeyVault {
   /** KS-04: list the key labels and the last four characters. Never list a secret. */
   listKeys(filter: { providerId?: string; projectId?: string } = {}): KeyView[] {
     return this.#requireItems()
+      .filter((item) => item.providerId !== AUX_PROVIDER_ID)
       .filter((item) => filter.providerId === undefined || item.providerId === filter.providerId)
       .filter((item) => filter.projectId === undefined || item.projectId === filter.projectId)
       .map((item) => this.#view(item));
   }
 
   getKeyView(id: string): KeyView | undefined {
-    const item = this.#requireItems().find((candidate) => candidate.id === id);
+    const item = this.#requireItems().find(
+      (candidate) => candidate.id === id && candidate.providerId !== AUX_PROVIDER_ID,
+    );
     return item ? this.#view(item) : undefined;
   }
 
   /** The caller uses the secret for one request. It never writes the secret. */
   getSecret(id: string): string | undefined {
     return this.#requireItems().find((item) => item.id === id)?.secret;
+  }
+
+  /**
+   * Keep a secret that is not a provider key inside the encrypted blob. The
+   * GitHub token uses this path, so the token is never plain text in storage.
+   */
+  async saveInternalSecret(name: string, secret: string): Promise<void> {
+    const items = this.#requireItems();
+    const id = `aux:${name}`;
+    const existing = items.find((item) => item.id === id);
+    if (existing) {
+      existing.secret = secret;
+      existing.last4 = secret.slice(-4);
+    } else {
+      items.push({
+        id,
+        label: `secret:${name}`,
+        providerId: AUX_PROVIDER_ID,
+        secret,
+        last4: secret.slice(-4),
+        createdAt: new Date(this.#now()).toISOString(),
+      });
+    }
+    await this.persist();
+  }
+
+  /** null when the vault is locked or the secret is absent. */
+  readInternalSecret(name: string): string | null {
+    if (this.#state !== "unlocked" || this.#items === null) {
+      return null;
+    }
+    return this.#items.find((item) => item.id === `aux:${name}`)?.secret ?? null;
+  }
+
+  hasInternalSecret(name: string): boolean {
+    return this.readInternalSecret(name) !== null;
+  }
+
+  async clearInternalSecret(name: string): Promise<void> {
+    const items = this.#requireItems();
+    const index = items.findIndex((item) => item.id === `aux:${name}`);
+    if (index === -1) {
+      return;
+    }
+    items.splice(index, 1);
+    await this.persist();
   }
 
   async addKey(input: KeyInput): Promise<KeyView> {

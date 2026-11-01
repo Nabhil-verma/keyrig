@@ -1,5 +1,15 @@
 import { useState, type ReactNode } from "react";
-import { BUILTIN_MANIFESTS } from "@keyrig/providers";
+import {
+  MAX_BUDGET_USD,
+  MAX_INSTRUCTIONS_CHARS,
+  MIN_BUDGET_USD,
+  RISK_LABELS,
+  TOOL_SPECS,
+  budgetMessage,
+  budgetState,
+  normalizeBudgetLimit,
+} from "@keyrig/core";
+import { BUILTIN_MANIFESTS, formatUsd } from "@keyrig/providers";
 import {
   addConnector,
   checkConnectorUrl,
@@ -10,13 +20,16 @@ import {
   setConnectorTools,
   type Connector,
   type ConnectorTransport,
-} from "../connectors";
-import { callMcpTool, listMcpTools } from "../mcp";
-import { requestPromptUse } from "../pendingPrompt";
-import { Link, navigate } from "../router";
-import { resetSettings, useSettings, writeSettings } from "../settings";
-import { addSkill, listSkills, removeSkill, SKILL_NAME_LIMIT, SKILL_PROMPT_LIMIT } from "../skills";
-import { SiteFooter, SiteHeader } from "../SiteChrome";
+} from "../stores/connectors";
+import { callMcpTool, listMcpTools } from "../services/mcp";
+import { requestPromptUse } from "../lib/pendingPrompt";
+import { Link, navigate } from "../app/router";
+import { resetSettings, useSettings, writeSettings } from "../stores/settings";
+import { addSkill, listSkills, removeSkill, SKILL_NAME_LIMIT, SKILL_PROMPT_LIMIT } from "../stores/skills";
+import { AGENT_RISK_VERSION, useAgentSettings, writeAgentSettings } from "../stores/toolSettings";
+import { readSpend } from "../stores/spendStore";
+import { SiteFooter, SiteHeader } from "../app/SiteChrome";
+import { browserStorage } from "../lib/storage";
 import { Icon } from "../ui/Icon";
 
 function Section({
@@ -177,6 +190,69 @@ function AppSection() {
           <Icon name="refresh" size={13} />
           Reset the appearance and app settings
         </button>
+      </div>
+    </Section>
+  );
+}
+
+function GuardrailsSection() {
+  const settings = useSettings();
+  const state = budgetState(readSpend(browserStorage()), settings.dailyBudgetUsd);
+  const [limit, setLimit] = useState(
+    settings.dailyBudgetUsd === null ? "" : String(settings.dailyBudgetUsd),
+  );
+
+  const commitLimit = (raw: string): void => {
+    setLimit(raw);
+    const value = raw.trim().length === 0 ? null : Number(raw);
+    writeSettings({ dailyBudgetUsd: normalizeBudgetLimit(value) });
+  };
+
+  return (
+    <Section
+      id="guardrails"
+      eyebrow="Guardrails"
+      title="Prompt and budget"
+      text="keyrig sends a guard prompt before every request. These settings change this browser only."
+    >
+      <div className="field">
+        <label htmlFor="instructions">Extra instructions</label>
+        <textarea
+          id="instructions"
+          className="textarea"
+          rows={4}
+          maxLength={MAX_INSTRUCTIONS_CHARS}
+          value={settings.instructions}
+          placeholder="For example: answer in short paragraphs."
+          onChange={(event) => writeSettings({ instructions: event.target.value })}
+        />
+        <p className="hint">
+          {settings.instructions.length} of {MAX_INSTRUCTIONS_CHARS} characters. The safety rules come first.
+          These instructions cannot turn off a safety rule.
+        </p>
+      </div>
+
+      <div className="field">
+        <label htmlFor="daily-budget">Daily budget in USD</label>
+        <input
+          id="daily-budget"
+          className="input mono"
+          type="number"
+          min={MIN_BUDGET_USD}
+          max={MAX_BUDGET_USD}
+          step="0.01"
+          value={limit}
+          placeholder="No limit"
+          onChange={(event) => commitLimit(event.target.value)}
+        />
+        <p className="hint">
+          keyrig warns at 80 percent and stops at 100 percent. Leave the field empty for no limit.
+        </p>
+      </div>
+
+      <div className="settings-note">
+        <strong>Today.</strong> {formatUsd(state.spentUsd)} is spent on this device.{" "}
+        {budgetMessage(state) ?? "No limit is set."}
       </div>
     </Section>
   );
@@ -628,9 +704,129 @@ function PluginsSection() {
   );
 }
 
+/** AS-01, AS-02 and MC-04: the tool list and the risk acknowledgement. */
+function AgentSection() {
+  const settings = useAgentSettings();
+  const acknowledged = settings.acknowledgedVersion >= AGENT_RISK_VERSION;
+
+  const toggleTool = (name: string): void => {
+    writeAgentSettings({
+      enabledTools: settings.enabledTools.includes(name)
+        ? settings.enabledTools.filter((item) => item !== name)
+        : [...settings.enabledTools, name],
+    });
+  };
+
+  return (
+    <Section
+      id="agent"
+      eyebrow="Agent"
+      title="Coding, files and 3D"
+      text="The agent works on a workspace in this browser. It runs only the tools that you turn on, and it asks before a risky call."
+    >
+      <div className="risk-box">
+        <strong>What each tool can do</strong>
+        <ul>
+          {TOOL_SPECS.map((tool) => (
+            <li key={tool.name}>
+              <span className="mono">{tool.name}</span> · {RISK_LABELS[tool.risk]} · {tool.effects[0]}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <label className="risk-check">
+        <input
+          type="checkbox"
+          checked={acknowledged}
+          onChange={(event) =>
+            writeAgentSettings({
+              acknowledgedVersion: event.target.checked ? AGENT_RISK_VERSION : 0,
+              ...(event.target.checked ? {} : { enabled: false }),
+            })
+          }
+        />
+        <span>
+          I understand these risks. The model can read any workspace file and send that text to my provider.
+        </span>
+      </label>
+
+      <div className="settings-row">
+        <div className="settings-row-copy">
+          <strong>Agent tools</strong>
+          <p>Off by default. The model gets a tool only when this switch is on.</p>
+        </div>
+        <button
+          type="button"
+          className="settings-switch"
+          aria-pressed={settings.enabled}
+          disabled={!acknowledged}
+          onClick={() => writeAgentSettings({ enabled: !settings.enabled })}
+        >
+          <span className="settings-switch-dot" />
+          {settings.enabled ? "On" : "Off"}
+        </button>
+      </div>
+
+      <ul className="settings-list">
+        {TOOL_SPECS.map((tool) => {
+          const on = settings.enabledTools.includes(tool.name);
+          return (
+            <li key={tool.name} className="settings-item">
+              <div className="settings-item-main">
+                <strong>{tool.title}</strong>
+                <p>{tool.description}</p>
+              </div>
+              <div className="settings-item-actions">
+                <span className={`chip ${tool.risk === "read" ? "chip--plain" : "chip--amber"}`}>
+                  {RISK_LABELS[tool.risk]}
+                </span>
+                <button
+                  type="button"
+                  className="settings-switch"
+                  aria-pressed={on}
+                  disabled={!acknowledged}
+                  onClick={() => toggleTool(tool.name)}
+                >
+                  <span className="settings-switch-dot" />
+                  {on ? "On" : "Off"}
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="settings-row">
+        <div className="settings-row-copy">
+          <strong>Approve a write without a prompt</strong>
+          <p>A delete and a GitHub commit always ask, even when this switch is on.</p>
+        </div>
+        <button
+          type="button"
+          className="settings-switch"
+          aria-pressed={settings.autoApproveWrites}
+          disabled={!acknowledged}
+          onClick={() => writeAgentSettings({ autoApproveWrites: !settings.autoApproveWrites })}
+        >
+          <span className="settings-switch-dot" />
+          {settings.autoApproveWrites ? "On" : "Off"}
+        </button>
+      </div>
+
+      <div className="settings-note">
+        <strong>The GitHub switch lives in the profile.</strong> A commit needs that switch, a connected account and
+        a repository in the workspace. Every commit still asks you.
+      </div>
+    </Section>
+  );
+}
+
 const INDEX = [
   { id: "appearance", label: "Appearance" },
   { id: "app", label: "App" },
+  { id: "guardrails", label: "Guardrails" },
+  { id: "agent", label: "Agent tools" },
   { id: "skills", label: "Skills" },
   { id: "connectors", label: "Connectors" },
   { id: "plugins", label: "Plugins" },
@@ -662,6 +858,8 @@ export function SettingsPage() {
         <div className="settings-stack">
           <AppearanceSection />
           <AppSection />
+          <GuardrailsSection />
+          <AgentSection />
           <SkillsSection />
           <ConnectorsSection />
           <PluginsSection />

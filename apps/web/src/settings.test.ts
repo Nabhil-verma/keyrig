@@ -21,6 +21,8 @@ describe("the settings keep only known values", () => {
       density: "compact",
       accent: "#3dd6c6",
       rememberRoute: false,
+      instructions: "",
+      dailyBudgetUsd: null,
       disabledProviders: ["openai"],
     });
   });
@@ -46,5 +48,13 @@ describe("the settings keep only known values", () => {
   it("turns off route memory only for a real false", () => {
     expect(normalizeSettings({ rememberRoute: false }).rememberRoute).toBe(false);
     expect(normalizeSettings({ rememberRoute: "no" as never }).rememberRoute).toBe(true);
+  });
+
+  it("keeps the guard instructions as text and drops a bad budget", () => {
+    expect(normalizeSettings({ instructions: "  be brief\n" }).instructions).toBe("be brief");
+    expect(normalizeSettings({ instructions: 7 as never }).instructions).toBe("");
+    expect(normalizeSettings({ dailyBudgetUsd: 5 }).dailyBudgetUsd).toBe(5);
+    expect(normalizeSettings({ dailyBudgetUsd: 0 }).dailyBudgetUsd).toBeNull();
+    expect(normalizeSettings({ dailyBudgetUsd: Number.NaN }).dailyBudgetUsd).toBeNull();
   });
 });

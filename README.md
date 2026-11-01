@@ -37,7 +37,9 @@ the error classes and the recorded-traffic tests.
 Phase 2 has a first web app. It covers keys, chat with provenance, the cost estimate, the model arena
 and a set of public pages.
 
-The artifact canvas and the coding agent are not built yet.
+Phase 3 is partly built. It covers the agent loop, the tool set, the approval card, the browser
+workspace, the 3D scene and the two profile connections. The artifact canvas and chat checkpoints are
+not built yet.
 
 ---
 
@@ -52,6 +54,16 @@ The artifact canvas and the coding agent are not built yet.
 - **Model picker.** A provider that lists its models fills the picker. You can reload the list, or type a name that the list does not have.
 - **MCP connectors.** Add a tool server in Settings, scan its tools, allow the ones you trust and run them.
   keyrig sends the arguments and reads the text. It sends no key.
+- **Agent tools with approval.** Turn on the coding tools in Settings. Each tool states its risk and its
+  effect. keyrig shows one approval card before a risky call, and a deny stops the call.
+- **A browser workspace.** The agent reads and writes text files inside this browser, for one account.
+  A path that names a secret, such as `.env` or a `.pem` file, is blocked.
+- **3D scenes.** The model sends scene data and keyrig renders it with three.js. The renderer loads only
+  when a scene arrives.
+- **Google and GitHub links.** Add a Gmail recovery address with Google, and connect GitHub with the
+  device flow. The GitHub token stays in the encrypted vault.
+- **A commit switch.** The AI can commit only when your profile allows it, and every commit still asks you.
+  See [docs/AGENT_TOOLS.md](docs/AGENT_TOOLS.md) and [docs/CONNECTIONS.md](docs/CONNECTIONS.md).
 - **Provenance on every answer.** Each answer shows the model, the key label, the token counts and the price state.
 - **Cost estimate.** Catalog prices turn into an estimated cost. A price that keyrig does not know shows as unknown.
 - **Model arena.** Send one prompt to several models at once. Compare time, cost and answer. Continue with the answer you choose.
@@ -245,7 +257,8 @@ Run the full suite with one command.
 npm test
 ```
 
-The suite has 144 tests in 12 files. It replays recorded provider traffic. It needs no network and no key.
+The suite replays recorded provider traffic. It needs no network and no key. It covers the vault, the
+providers, the core, the guard prompt, the budget and the app stores.
 
 - [docs/TEST_PLAN.md](docs/TEST_PLAN.md) maps each rule to the test that proves it.
 - [packages/providers/src/tests/fixtures](packages/providers/src/tests/fixtures) holds the recorded traffic.
@@ -298,7 +311,9 @@ a secure context. The localhost address counts as secure. Other plain HTTP addre
 - The desktop app and the OS keychain (KS-01).
 - Provider profiles, the fallback chain and model migration (PV-04, PV-06, PV-10).
 - Budgets and run limits (CO-02, CO-03).
-- The artifact canvas, checkpoints, approvals and the coding agent (Phase 3 and 4).
+- The artifact canvas and chat checkpoints (Phase 3 and 4).
+- A shell or a run-command tool. keyrig runs in a browser, so it has no process to start.
+- Rule files for the agent (AS-08), tool hooks (AS-07) and the `@` and `/` context shortcuts (CX-04).
 - The `doctor` command and the CLI (KS-08, KS-09).
 
 ---
@@ -327,6 +342,8 @@ Short version:
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | The words that keyrig uses for each meaning. |
 | [docs/TEST_PLAN.md](docs/TEST_PLAN.md) | Each rule and the test that proves it. |
 | [docs/RBAC.md](docs/RBAC.md) | The permission keys, the roles and the rules. |
+| [docs/AGENT_TOOLS.md](docs/AGENT_TOOLS.md) | The tools, the risk levels, the approval card, the protected paths and the 3D scene. |
+| [docs/CONNECTIONS.md](docs/CONNECTIONS.md) | The Google recovery email and the GitHub commit account. |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Decisions and their reasons. |
 | [docs/INSPIRED_BY.md](docs/INSPIRED_BY.md) | The projects that inspired keyrig. |
 

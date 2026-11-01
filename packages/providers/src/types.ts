@@ -18,9 +18,29 @@ export interface ImagePart {
 
 export type ContentPart = TextPart | ImagePart;
 
+/** AS-01 and MC-04: one tool that the model can ask for. */
+export interface ToolSpec {
+  name: string;
+  description: string;
+  /** A JSON Schema object with type "object". keyrig validates every call. */
+  parameters: Record<string, unknown>;
+}
+
+/** MC-03: one tool call that the model asked for. The arguments stay text. */
+export interface ToolCall {
+  id: string;
+  name: string;
+  /** The raw argument text. Validate it before you use it (MC-05). */
+  arguments: string;
+}
+
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string | ContentPart[];
+  /** Assistant only: the calls that the model asked for. */
+  toolCalls?: ToolCall[];
+  /** Tool only: the id of the call that this result answers. */
+  toolCallId?: string;
 }
 
 export interface ChatRequest {
@@ -30,6 +50,8 @@ export interface ChatRequest {
   temperature?: number;
   /** Ask the provider to send prompt-cache usage, when the provider supports it. */
   promptCache?: boolean;
+  /** AS-01: the tools that the model can ask for. Absent means chat only. */
+  tools?: readonly ToolSpec[];
 }
 
 /**
@@ -57,6 +79,8 @@ export interface ChatResult {
   model: string;
   providerId: string;
   requestId?: string;
+  /** AS-01: the calls that the model asked for, in order. */
+  toolCalls?: ToolCall[];
   /** KS-07 and CO-05: safe notes for the user. Example: a local base URL warning. */
   warnings?: string[];
 }

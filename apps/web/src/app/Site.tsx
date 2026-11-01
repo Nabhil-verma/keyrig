@@ -1,21 +1,21 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { MotionConfig, motion, useScroll, useSpring } from "framer-motion";
-import { HomePage } from "./pages/HomePage";
-import { SecurityPage } from "./pages/SecurityPage";
+import { HomePage } from "../pages/HomePage";
+import { SecurityPage } from "../pages/SecurityPage";
 
 // The two heavy pages load on the first visit. The home page keeps the first paint.
 const ProvidersPage = lazy(() =>
-  import("./pages/ProvidersPage").then((module) => ({ default: module.ProvidersPage })),
+  import("../pages/ProvidersPage").then((module) => ({ default: module.ProvidersPage })),
 );
 const SettingsPage = lazy(() =>
-  import("./pages/SettingsPage").then((module) => ({ default: module.SettingsPage })),
+  import("../pages/SettingsPage").then((module) => ({ default: module.SettingsPage })),
 );
 // The workspace loads on the first visit to /app, then stays mounted.
-const Workspace = lazy(() => import("./App"));
+const Workspace = lazy(() => import("./WorkspaceScreen"));
 import { Link, useRoute, type Route } from "./router";
 import { SiteFooter, SiteHeader } from "./SiteChrome";
-import { EASE_OUT } from "./motion";
-import { useSettings } from "./settings";
+import { EASE_OUT } from "../lib/motion";
+import { useSettings } from "../stores/settings";
 
 function ScrollProgress() {
   const { scrollYProgress } = useScroll();

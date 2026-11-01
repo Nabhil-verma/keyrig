@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { createMemoryStorage, type StorageLike } from "@keyrig/shared";
-import { THEME_KEY, type Theme } from "./theme";
+import { THEME_KEY, type Theme } from "../lib/theme";
 
 /**
  * The settings of this device. They are not per account: the theme, the
@@ -19,6 +19,10 @@ export interface AppSettings {
   density: DensityChoice;
   accent: string | null;
   rememberRoute: boolean;
+  /** AS-06: the user block of the guard prompt. The core caps the length. */
+  instructions: string;
+  /** CO-02: the daily spend limit in USD. null means no limit. */
+  dailyBudgetUsd: number | null;
   disabledProviders: string[];
 }
 
@@ -31,6 +35,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   density: "comfortable",
   accent: null,
   rememberRoute: true,
+  instructions: "",
+  dailyBudgetUsd: null,
   disabledProviders: [],
 };
 
@@ -78,8 +84,32 @@ export function normalizeSettings(input: Partial<AppSettings> | null, fallbackTh
     density: isDensity(source.density) ? source.density : DEFAULT_SETTINGS.density,
     accent,
     rememberRoute: typeof source.rememberRoute === "boolean" ? source.rememberRoute : DEFAULT_SETTINGS.rememberRoute,
+    instructions: normalizeInstructionText(source.instructions),
+    dailyBudgetUsd: normalizeBudgetLimit(source.dailyBudgetUsd),
     disabledProviders: disabled,
   };
+}
+
+/**
+ * The user block of the guard prompt (AS-06). The core caps the length and
+ * masks a key. This function keeps only the line breaks clean.
+ */
+function normalizeInstructionText(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.replace(/\r\n/g, "\n").trim();
+}
+
+/** CO-02: a daily limit. A value outside the range means no limit. */
+function normalizeBudgetLimit(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  if (value < 0.01 || value > 1000) {
+    return null;
+  }
+  return Math.round(value * 100) / 100;
 }
 
 /** Read the settings once. A broken record falls back to the theme file. */

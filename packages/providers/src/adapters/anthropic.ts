@@ -34,6 +34,7 @@ export async function readAnthropicStream(
     reasoning: "",
     usage: { inputTokens: 0, outputTokens: 0 },
     finishReason: null,
+    toolCalls: [],
     sawEnd: false,
     part: false,
   };

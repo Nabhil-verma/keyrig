@@ -1,6 +1,6 @@
 import { createDocument, isVersionedDocument, type StorageLike } from "@keyrig/shared";
 import { checkBaseUrl } from "@keyrig/providers";
-import { browserStorage } from "./storage";
+import { browserStorage } from "../lib/storage";
 
 /**
  * A connector is an external MCP tool server. keyrig stores the endpoint, the

@@ -1,8 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { applySettings, getSettings } from "./settings";
+import { applySettings, getSettings } from "../stores/settings";
 import { Site } from "./Site";
-import "./styles.css";
+import "../styles/styles.css";
+import "../styles/workspace.css";
 
 // The settings set the theme before the first paint, so the page does not flash.
 applySettings(getSettings());

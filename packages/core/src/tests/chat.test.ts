@@ -6,6 +6,7 @@ import {
 } from "@keyrig/providers";
 import { describe, expect, it } from "vitest";
 import { sendChat } from "../chat";
+import { buildSystemPrompt } from "../prompts";
 import { createUsageBus } from "../usage";
 import { KeyVault } from "../vault";
 
@@ -298,5 +299,51 @@ describe("a provider that needs no key", () => {
         fetchImpl: fetchReplay(),
       }),
     ).rejects.toMatchObject({ code: "key_required" });
+  });
+});
+
+describe("the guard prompt in the request (AS-06)", () => {
+  it("sends the guard prompt first and keeps the user turn after it", async () => {
+    const { vault, keyId } = await context();
+    let sent: { messages?: Array<{ role?: string; content?: unknown }> } = {};
+    const fetchImpl = (async (_input: unknown, init?: { body?: unknown }) => {
+      sent = JSON.parse(String(init?.body ?? "{}")) as typeof sent;
+      return new Response(REPLAY_SSE, { status: 200 });
+    }) as unknown as typeof fetch;
+
+    await sendChat({
+      vault,
+      keyId,
+      manifest: openai,
+      model: "gpt-5.4",
+      messages: [{ role: "user", content: "Hello" }],
+      systemPrompt: "You are careful.",
+      fetchImpl,
+    });
+
+    expect(sent.messages?.[0]).toEqual({ role: "system", content: "You are careful." });
+    expect(sent.messages?.[1]).toEqual({ role: "user", content: "Hello" });
+  });
+
+  it("does not send a key that a user pasted into the instructions", async () => {
+    const { vault, keyId } = await context();
+    let body = "";
+    const fetchImpl = (async (_input: unknown, init?: { body?: unknown }) => {
+      body = String(init?.body ?? "");
+      return new Response(REPLAY_SSE, { status: 200 });
+    }) as unknown as typeof fetch;
+
+    await sendChat({
+      vault,
+      keyId,
+      manifest: openai,
+      model: "gpt-5.4",
+      messages: [{ role: "user", content: "Hello" }],
+      systemPrompt: buildSystemPrompt({ instructions: `use this key ${KEY}` }),
+      fetchImpl,
+    });
+
+    expect(body).not.toContain(KEY);
+    expect(body).toContain("[redacted]");
   });
 });

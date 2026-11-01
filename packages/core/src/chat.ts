@@ -8,7 +8,9 @@ import {
   type Pricing,
   type ProviderManifest,
   type StreamHandlers,
+  type ToolSpec,
 } from "@keyrig/providers";
+import { withSystemPrompt } from "./prompts";
 import type { KeyView, KeyVault } from "./vault";
 import type { UsageBus, UsageEvent } from "./usage";
 
@@ -26,6 +28,10 @@ export interface SendChatOptions {
   manifest: ProviderManifest;
   model: string;
   messages: readonly ChatMessage[];
+  /** AS-06: the guard prompt. The core puts it first in the message list. */
+  systemPrompt?: string;
+  /** AS-01: the tools that the model can ask for. The agent loop validates each call. */
+  tools?: readonly ToolSpec[];
   pricing?: Pricing;
   bus?: UsageBus;
   fetchImpl?: typeof fetch;
@@ -61,7 +67,7 @@ function isEmptyReply(result: ChatResult): boolean {
 }
 
 export async function sendChat(options: SendChatOptions): Promise<ChatOutcome> {
-  const { vault, manifest, model, messages } = options;
+  const { vault, manifest, model } = options;
   const keyId = options.keyId ?? "";
 
   let key: KeyView | null = null;
@@ -97,6 +103,12 @@ export async function sendChat(options: SendChatOptions): Promise<ChatOutcome> {
     });
   }
 
+  // AS-06: the guard prompt goes first, so text inside the turn cannot replace it.
+  const messages =
+    options.systemPrompt === undefined
+      ? options.messages
+      : withSystemPrompt(options.messages, options.systemPrompt);
+
   const call = async (): Promise<ChatResult> =>
     runChat({
       manifest,
@@ -112,6 +124,7 @@ export async function sendChat(options: SendChatOptions): Promise<ChatOutcome> {
         messages,
         ...(options.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
         ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
+        ...(options.tools !== undefined ? { tools: options.tools } : {}),
       },
       ...(options.handlers !== undefined ? { handlers: options.handlers } : {}),
     });

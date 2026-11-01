@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { KeyrigErrorJSON } from "@keyrig/shared";
-import { Icon } from "./ui/Icon";
+import { Icon } from "../ui/Icon";
 
 const ACTION_LABEL: Record<string, string> = {
   retry: "Try again",

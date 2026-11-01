@@ -4092,3 +4092,266 @@ body::after {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Agent tools, approvals, the tool log and the 3D scene (AS-01 to AS-05). */
+.approval-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: var(--backdrop);
+}
+
+.approval {
+  width: min(560px, 100%);
+  max-height: 88vh;
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid var(--state-line-amber);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.approval-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.approval-head h2 {
+  margin: 2px 0 0;
+  font-size: 18px;
+}
+
+.approval-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: var(--amber-text);
+  background: var(--amber-soft);
+  border: 1px solid var(--state-line-amber);
+}
+
+.approval-head .chip {
+  margin-left: auto;
+}
+
+.approval-summary {
+  margin: 0 0 10px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.approval-effects {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.approval-facts {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 16px;
+  font-size: 12px;
+}
+
+.approval-facts dt {
+  color: var(--muted);
+}
+
+.approval-facts dd {
+  margin: 2px 0 0;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+
+.approval-text {
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.risk-box {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--state-line-amber);
+  border-radius: 12px;
+  background: var(--amber-soft);
+}
+
+.risk-box strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.risk-box ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.risk-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-soft);
+}
+
+.trace {
+  margin: 6px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--control-line);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.trace-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.trace-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trace-item {
+  display: flex;
+  gap: 9px;
+}
+
+.trace-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  flex: none;
+  color: var(--cyan-text);
+  background: var(--cyan-soft);
+  border: 1px solid var(--state-line-cyan);
+}
+
+.trace-item[data-state="denied"] .trace-icon,
+.trace-item[data-state="blocked"] .trace-icon,
+.trace-item[data-state="error"] .trace-icon {
+  color: var(--amber-text);
+  background: var(--amber-soft);
+  border-color: var(--state-line-amber);
+}
+
+.trace-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+}
+
+.trace-status,
+.trace-time {
+  color: var(--muted);
+}
+
+.trace-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-summary {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.trace-path {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.scene {
+  margin: 6px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--control-line);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.scene-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.scene-canvas {
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+
+.scene-canvas canvas {
+  display: block;
+}
+
+.workspace-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 210px;
+  overflow: auto;
+}
+
+.workspace-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.workspace-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-soft);
+}
+
+.workspace-size {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-rule {
+  margin: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--control-line);
+}
+

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { CUSTOM_MODEL_VALUE, modelOptions } from "./modelOptions";
-import { Icon } from "./ui/Icon";
+import { CUSTOM_MODEL_VALUE, modelOptions } from "../lib/modelOptions";
+import { Icon } from "../ui/Icon";
 
 interface ModelPickerProps {
   id: string;

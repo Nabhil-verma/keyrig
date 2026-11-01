@@ -2,7 +2,7 @@ import { useState } from "react";
 import { isKeyrigError, type KeyrigErrorJSON } from "@keyrig/shared";
 import { createVaultExport, type KeyVault, type KeyView } from "@keyrig/core";
 import type { ProviderManifest } from "@keyrig/providers";
-import { Icon } from "./ui/Icon";
+import { Icon } from "../ui/Icon";
 
 interface KeyPanelProps {
   vault: KeyVault;

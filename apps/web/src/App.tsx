@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AccountRecord, KeyView, RoleAssignment, RoleId, SignedInAccount } from "@keyrig/core";
+import type { AccountRecord, AgentApprovalRequest, KeyView, RoleAssignment, RoleId, SignedInAccount } from "@keyrig/core";
 import {
+  GITHUB_TOKEN_NAME,
   ROLE_LABELS,
+  accountStorage,
   assignRole,
+  budgetMessage,
+  budgetState,
+  buildSystemPrompt,
   can,
   createUsageBus,
   ensureAccountRole,
   importVault,
   listAccounts,
   loadProviderModels,
+  parseRepo,
   readAssignments,
   sendChat,
   signIn,
@@ -28,26 +34,51 @@ import {
   type ProviderManifest,
 } from "@keyrig/providers";
 import { isKeyrigError, toKeyrigError, type KeyrigErrorJSON } from "@keyrig/shared";
-import { ArenaPanel } from "./ArenaPanel";
-import { AuthPanel } from "./AuthPanel";
-import { ChatPanel } from "./ChatPanel";
-import { KeyPanel } from "./KeyPanel";
-import { ProfilePanel } from "./ProfilePanel";
-import { RolesPanel } from "./RolesPanel";
-import { readRoute, writeRoute } from "./routeStore";
-import { useSettings } from "./settings";
-import { browserStorage } from "./storage";
-import { motion } from "framer-motion";
+import { ArenaPanel } from "../components/ArenaPanel";
+import { AuthPanel } from "../components/AuthPanel";
+import { ChatPanel } from "../components/ChatPanel";
+import { ConnectionsPanel } from "../components/ConnectionsPanel";
+import { KeyPanel } from "../components/KeyPanel";
+import { OutboundPanel } from "../components/OutboundPanel";
+import { ProfilePanel } from "../components/ProfilePanel";
+import { RolesPanel } from "../components/RolesPanel";
+import { Shelf, type ShelfTab } from "../components/Shelf";
 import { SiteFooter, SiteHeader } from "./SiteChrome";
-import { newId, type ArenaResult, type UIMessage } from "./types";
-import { Icon } from "./ui/Icon";
+import { ToolTrace } from "../components/ToolTrace";
+import { WorkspacePanel } from "../components/WorkspacePanel";
+import { runToolTurn } from "../services/agentRun";
+import { expandContext } from "../lib/composerTokens";
+import { readConnections, type AccountConnections } from "../stores/connections";
+import { createDeltaBuffer, type DeltaBuffer } from "../lib/deltaBuffer";
+import { Link } from "./router";
+import { readRoute, writeRoute } from "../stores/routeStore";
+import { useSettings, writeSettings } from "../stores/settings";
+import { addSpend, readSpend, utcDay } from "../stores/spendStore";
+import { browserStorage } from "../lib/storage";
+import {
+  createThread,
+  readThreads,
+  removeThread as removeThreadFromList,
+  threadPreview,
+  titleFrom,
+  upsertThread,
+  writeThreads,
+  type StoredThread,
+} from "../stores/threads";
+import { activeTools, useAgentSettings } from "../stores/toolSettings";
+import { newId, type ArenaResult, type UIMessage } from "../lib/types";
+import { BrandLockup } from "../ui/BrandLockup";
+import { Icon } from "../ui/Icon";
+import { Workspace, type WorkspaceFile } from "../stores/workspace";
 
 const storage = browserStorage();
+const INSPECT_TABS: ReadonlyArray<{ id: InspectTab; label: string }> = [
+  { id: "outbound", label: "Outbound" },
+  { id: "files", label: "Files" },
+  { id: "tools", label: "Tools" },
+];
 
-const TABS = [
-  { id: "chat", label: "Chat", icon: "chat" },
-  { id: "arena", label: "Arena", icon: "arena" },
-] as const;
+type InspectTab = "outbound" | "files" | "tools";
 
 function safeError(caught: unknown): KeyrigErrorJSON {
   return isKeyrigError(caught) ? caught.toJSON() : toKeyrigError(caught).toJSON();
@@ -55,7 +86,7 @@ function safeError(caught: unknown): KeyrigErrorJSON {
 
 function toChatMessages(messages: UIMessage[]): ChatMessage[] {
   return messages
-    .filter((message) => !message.error && message.content.trim().length > 0)
+    .filter((message) => message.error === undefined && message.content.trim().length > 0)
     .map((message) => ({ role: message.role, content: message.content }));
 }
 
@@ -76,10 +107,14 @@ export default function App() {
   const [modelId, setModelId] = useState("gpt-5.4");
   const [keyId, setKeyId] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
-  const [tab, setTab] = useState<"chat" | "arena">("chat");
+  const [view, setView] = useState<"chat" | "arena">("chat");
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [totalCost, setTotalCost] = useState(0);
+  /** CO-02: the spend for the UTC day, kept on this device. */
+  const [spentToday, setSpentToday] = useState(0);
+  /** A user choice to pass the daily limit for this session only. */
+  const [overBudget, setOverBudget] = useState(false);
   const [role, setRole] = useState<RoleId | null>(null);
   const [accounts, setAccounts] = useState<AccountRecord[]>([]);
   const [assignments, setAssignments] = useState<RoleAssignment[]>([]);
@@ -88,10 +123,34 @@ export default function App() {
   const [modelsBusy, setModelsBusy] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [modelsNonce, setModelsNonce] = useState(0);
+  /** AS-01: the agent settings of this device. */
+  const agentSettings = useAgentSettings();
+  const [connections, setConnections] = useState<AccountConnections | null>(null);
+  const [approval, setApproval] = useState<AgentApprovalRequest | null>(null);
+  const [files, setFiles] = useState<WorkspaceFile[]>([]);
+  const [threads, setThreads] = useState<StoredThread[]>([]);
+  const [activeId, setActiveId] = useState("");
+  const [search, setSearch] = useState("");
+  const [shelf, setShelf] = useState<{ open: boolean; tab: ShelfTab }>({ open: false, tab: "keys" });
+  const [routeOpen, setRouteOpen] = useState(false);
+  const [inspect, setInspect] = useState<InspectTab>("outbound");
 
   const bus = useMemo(() => createUsageBus(), []);
   const abortRef = useRef<AbortController | null>(null);
-  const keysRef = useRef<HTMLDivElement | null>(null);
+  const approvalRef = useRef<((decision: "approve" | "deny") => void) | null>(null);
+  const threadsRef = useRef<StoredThread[]>([]);
+  /** AS-05: one workspace for the signed-in account. */
+  const workspace = useMemo(
+    () => (session === null ? null : new Workspace({ storage: accountStorage(storage, session.username) })),
+    [session],
+  );
+  const refreshFiles = useCallback(() => {
+    setFiles(workspace === null ? [] : workspace.files());
+  }, [workspace]);
+
+  useEffect(() => {
+    threadsRef.current = threads;
+  }, [threads]);
 
   useEffect(() => {
     let active = true;
@@ -103,7 +162,12 @@ export default function App() {
       setCatalogSource(result.source);
       setCatalogWarning(result.warning ?? null);
     });
-    const unsubscribe = bus.subscribe((event) => setTotalCost((value) => value + event.costUsd));
+    // CO-02: the day opens from the stored total, so a reload keeps the budget.
+    setSpentToday(readSpend(storage, utcDay()));
+    const unsubscribe = bus.subscribe((event) => {
+      setTotalCost((value) => value + event.costUsd);
+      setSpentToday(addSpend(storage, event.costUsd));
+    });
     return () => {
       active = false;
       unsubscribe();
@@ -119,8 +183,53 @@ export default function App() {
     [catalog, providerId, modelId],
   );
   const pricing = catalogModel?.pricing;
+  /** AS-06: one guard prompt for every request of this session. */
+  const systemPromptText = useMemo(
+    () => buildSystemPrompt({ instructions: settings.instructions, tools: true }),
+    [settings.instructions],
+  );
+  /** AS-01: a tool call needs a model that takes tools and a user who turned the agent on. */
+  const activeToolNames = activeTools(agentSettings);
+  const toolsReady =
+    activeToolNames.length > 0 && manifest.abilities.tools && manifest.wireFormat === "openai-chat";
+  /** CO-02: the day budget, the warning and the stop. */
+  const budget = budgetState(spentToday, settings.dailyBudgetUsd);
+  const budgetStop = budget.level === "blocked" && !overBudget;
   const providerKeys = keys.filter((key) => key.providerId === providerId);
   const selectedKey = keys.find((key) => key.id === keyId);
+  const activeThread = threads.find((thread) => thread.id === activeId);
+  const theme = settings.theme === "light" ? "light" : "dark";
+
+  const filteredThreads = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (needle.length === 0) {
+      return threads;
+    }
+    return threads.filter(
+      (thread) =>
+        thread.title.toLowerCase().includes(needle) || threadPreview(thread).toLowerCase().includes(needle),
+    );
+  }, [threads, search]);
+
+  const lastTools = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message !== undefined && message.role === "assistant" && message.tools !== undefined) {
+        return message.tools;
+      }
+    }
+    return [];
+  }, [messages]);
+
+  const contextUsed = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message !== undefined && message.role === "assistant" && message.inputTokens !== undefined) {
+        return message.inputTokens + (message.outputTokens ?? 0);
+      }
+    }
+    return 0;
+  }, [messages]);
 
   useEffect(() => {
     const available = keys.filter((key) => key.providerId === providerId);
@@ -189,9 +298,7 @@ export default function App() {
             return;
           }
           setProviderModels(result.models);
-          setModelsError(
-            result.models.length === 0 ? "The provider sent no model names. Type the model name." : null,
-          );
+          setModelsError(result.models.length === 0 ? "The provider sent no model names. Type the model name." : null);
         })
         .catch((caught: unknown) => {
           if (!active) {
@@ -214,21 +321,60 @@ export default function App() {
     };
   }, [session, manifest, keyId, effectiveBaseUrl, providerKeys.length, role, modelsNonce]);
 
+  /** The chat record follows the messages of the open thread. */
+  useEffect(() => {
+    if (session === null || activeId.length === 0) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      const current = threadsRef.current.find((thread) => thread.id === activeId);
+      const firstUser = messages.find((message) => message.role === "user");
+      const title =
+        current !== undefined && current.title !== "New chat"
+          ? current.title
+          : firstUser !== undefined
+            ? titleFrom(firstUser.display ?? firstUser.content)
+            : "New chat";
+      const now = new Date().toISOString();
+      const next = upsertThread(threadsRef.current, {
+        id: activeId,
+        title,
+        createdAt: current?.createdAt ?? now,
+        updatedAt: now,
+        messages,
+      });
+      writeThreads(accountStorage(storage, session.username), next);
+      setThreads(next);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [messages, activeId, session]);
+
+  /** Keep the route for this account. The write is best effort. */
+  useEffect(() => {
+    if (session === null || !settings.rememberRoute) {
+      return;
+    }
+    writeRoute(storage, session.username, { providerId, modelId, keyId, baseUrl });
+  }, [session, providerId, modelId, keyId, baseUrl, settings.rememberRoute]);
+
   const blockReason = !session
     ? "Sign in to start."
     : !can(role, "chat.send")
       ? "Your role cannot send prompts. Ask an owner to change your role."
-      : needsKey && providerKeys.length === 0
-      ? `Add a key for ${manifest.displayName}.`
-      : modelId.trim().length === 0
-        ? "Choose a model."
-        : customBaseBlocked
-          ? (baseUrlCheck?.warning ?? "The base URL is not allowed.")
-          : (baseUrlCheck?.warning ?? null);
+      : budgetStop
+        ? (budgetMessage(budget) ?? "The daily budget is spent.")
+        : needsKey && providerKeys.length === 0
+          ? `Add a key for ${manifest.displayName}.`
+          : modelId.trim().length === 0
+            ? "Choose a model."
+            : customBaseBlocked
+              ? (baseUrlCheck?.warning ?? "The base URL is not allowed.")
+              : (baseUrlCheck?.warning ?? null);
 
   const canSend =
     session !== null &&
     can(role, "chat.send") &&
+    !budgetStop &&
     (!needsKey || (providerKeys.length > 0 && keyId.length > 0)) &&
     modelId.trim().length > 0 &&
     !customBaseBlocked &&
@@ -242,6 +388,23 @@ export default function App() {
       const controller = new AbortController();
       abortRef.current = controller;
       setStreaming(true);
+      // PV-08: join the deltas and render once for each frame.
+      const buffer: DeltaBuffer = createDeltaBuffer(
+        (text) => {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === assistantId ? { ...message, content: message.content + text } : message,
+            ),
+          );
+        },
+        (callback) => {
+          if (typeof requestAnimationFrame === "function") {
+            requestAnimationFrame(callback);
+          } else {
+            setTimeout(callback, 16);
+          }
+        },
+      );
       try {
         const outcome = await sendChat({
           vault: session.vault,
@@ -249,20 +412,17 @@ export default function App() {
           manifest,
           model: modelId.trim(),
           messages: toChatMessages(history),
+          systemPrompt: systemPromptText,
           ...(pricing !== undefined ? { pricing } : {}),
           ...(effectiveBaseUrl !== undefined ? { baseUrl: effectiveBaseUrl } : {}),
           bus,
           signal: controller.signal,
           handlers: {
-            onDelta: (text) => {
-              setMessages((current) =>
-                current.map((message) =>
-                  message.id === assistantId ? { ...message, content: message.content + text } : message,
-                ),
-              );
-            },
+            onDelta: (text) => buffer.push(text),
           },
         });
+        // The full text replaces the streamed text, so a late flush must not run.
+        buffer.clear();
         setMessages((current) =>
           current.map((message) =>
             message.id === assistantId
@@ -286,6 +446,8 @@ export default function App() {
           ),
         );
       } catch (caught) {
+        // Keep the text that arrived before the failure (PV-08).
+        buffer.flush();
         const error = safeError(caught);
         setMessages((current) =>
           current.map((message) => (message.id === assistantId ? { ...message, error } : message)),
@@ -297,13 +459,193 @@ export default function App() {
         setKeys(session.vault.listKeys());
       }
     },
-    [session, selectedKey, manifest, modelId, pricing, effectiveBaseUrl, bus, providerId],
+    [session, selectedKey, manifest, modelId, pricing, effectiveBaseUrl, bus, providerId, systemPromptText],
   );
+
+  /** AS-01: a turn that can call a tool. The loop lives in the core. */
+  const runToolAssistant = useCallback(
+    async (assistantId: string, history: UIMessage[]): Promise<void> => {
+      if (!session || workspace === null || (needsKey && !selectedKey)) {
+        return;
+      }
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setStreaming(true);
+      const buffer: DeltaBuffer = createDeltaBuffer(
+        (text) => {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === assistantId ? { ...message, content: message.content + text } : message,
+            ),
+          );
+        },
+        (callback) => {
+          if (typeof requestAnimationFrame === "function") {
+            requestAnimationFrame(callback);
+          } else {
+            setTimeout(callback, 16);
+          }
+        },
+      );
+
+      let spent = 0;
+      let pricingKnown = true;
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let keyLabel = selectedKey?.label ?? "No key";
+      let owner = "";
+      let repo = "";
+      if (connections !== null && connections.githubRepo.length > 0) {
+        try {
+          const parsed = parseRepo(connections.githubRepo);
+          owner = parsed.owner;
+          repo = parsed.repo;
+        } catch {
+          owner = "";
+          repo = "";
+        }
+      }
+
+      try {
+        const result = await runToolTurn({
+          messages: toChatMessages(history),
+          enabled: activeTools(agentSettings),
+          autoApproveWrites: agentSettings.autoApproveWrites,
+          signal: controller.signal,
+          workspace,
+          callModel: async (outgoing, tools) => {
+            const outcome = await sendChat({
+              vault: session.vault,
+              ...(selectedKey ? { keyId: selectedKey.id } : {}),
+              manifest,
+              model: modelId.trim(),
+              messages: outgoing,
+              systemPrompt: systemPromptText,
+              ...(tools.length > 0 ? { tools } : {}),
+              ...(pricing !== undefined ? { pricing } : {}),
+              ...(effectiveBaseUrl !== undefined ? { baseUrl: effectiveBaseUrl } : {}),
+              bus,
+              signal: controller.signal,
+              toolRan: true,
+              handlers: { onDelta: (text) => buffer.push(text) },
+            });
+            buffer.flush();
+            spent += outcome.cost.usd;
+            pricingKnown = pricingKnown && outcome.cost.pricingKnown;
+            inputTokens += outcome.result.usage.inputTokens;
+            outputTokens += outcome.result.usage.outputTokens;
+            keyLabel = outcome.key?.label ?? "No key";
+            return { text: outcome.result.text, toolCalls: outcome.result.toolCalls ?? [] };
+          },
+          approve: (request) =>
+            new Promise<"approve" | "deny">((resolve) => {
+              approvalRef.current = resolve;
+              setApproval(request);
+            }),
+          github: {
+            token: session.vault.readInternalSecret(GITHUB_TOKEN_NAME),
+            owner,
+            repo,
+            branch: connections?.githubBranch ?? "main",
+            allowCommit: connections?.commitPermit === true,
+          },
+          onScene: (next) =>
+            setMessages((current) =>
+              current.map((message) => (message.id === assistantId ? { ...message, scene: next } : message)),
+            ),
+          onEvent: (event) => {
+            setMessages((current) =>
+              current.map((message) => {
+                if (message.id !== assistantId) {
+                  return message;
+                }
+                const tools = message.tools ?? [];
+                const index = tools.findIndex((item) => item.id === event.id);
+                const nextTools =
+                  index === -1 ? [...tools, event] : tools.map((item, at) => (at === index ? event : item));
+                return { ...message, tools: nextTools };
+              }),
+            );
+            refreshFiles();
+          },
+        });
+
+        buffer.clear();
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === assistantId
+              ? {
+                  ...message,
+                  content: result.text,
+                  model: modelId,
+                  providerId,
+                  keyLabel,
+                  costUsd: spent,
+                  pricingKnown,
+                  inputTokens,
+                  outputTokens,
+                  stopReason: result.hitLimit ? "limit" : "complete",
+                }
+              : message,
+          ),
+        );
+      } catch (caught) {
+        buffer.flush();
+        const error = safeError(caught);
+        setMessages((current) =>
+          current.map((message) => (message.id === assistantId ? { ...message, error } : message)),
+        );
+      } finally {
+        setStreaming(false);
+        abortRef.current = null;
+        approvalRef.current?.("deny");
+        approvalRef.current = null;
+        setApproval(null);
+        setKeys(session.vault.listKeys());
+        refreshFiles();
+      }
+    },
+    [
+      session,
+      workspace,
+      needsKey,
+      selectedKey,
+      connections,
+      agentSettings,
+      manifest,
+      modelId,
+      pricing,
+      effectiveBaseUrl,
+      bus,
+      providerId,
+      systemPromptText,
+      refreshFiles,
+    ],
+  );
+
+  /** AS-01: answer one approval card. */
+  const decideApproval = (decision: "approve" | "deny"): void => {
+    approvalRef.current?.(decision);
+    approvalRef.current = null;
+    setApproval(null);
+  };
 
   const send = useCallback(
     (text: string): void => {
+      const trimmed = text.trim();
+      if (trimmed.length === 0) {
+        return;
+      }
+      // CX-04: `@file` becomes a context block for the model, not for the box.
+      const outgoing = expandContext(trimmed, files);
       const at = new Date().toISOString();
-      const user: UIMessage = { id: newId(), role: "user", content: text, at };
+      const user: UIMessage = {
+        id: newId(),
+        role: "user",
+        content: outgoing,
+        ...(outgoing !== trimmed ? { display: trimmed } : {}),
+        at,
+      };
       const assistant: UIMessage = {
         id: newId(),
         role: "assistant",
@@ -314,20 +656,20 @@ export default function App() {
         ...(selectedKey ? { keyLabel: selectedKey.label } : {}),
       };
       setMessages((current) => [...current, user, assistant]);
-      void runAssistant(assistant.id, [...messages, user]);
+      if (toolsReady) {
+        void runToolAssistant(assistant.id, [...messages, user]);
+      } else {
+        void runAssistant(assistant.id, [...messages, user]);
+      }
     },
-    [messages, modelId, providerId, selectedKey, runAssistant],
+    [files, messages, modelId, providerId, selectedKey, runAssistant, runToolAssistant, toolsReady],
   );
 
   const stop = (): void => {
     abortRef.current?.abort();
-  };
-
-  const clearChat = (): void => {
-    if (streaming) {
-      return;
-    }
-    setMessages([]);
+    approvalRef.current?.("deny");
+    approvalRef.current = null;
+    setApproval(null);
   };
 
   const onErrorAction = (action: string, message: UIMessage): void => {
@@ -347,20 +689,16 @@ export default function App() {
       return;
     }
     if (action === "check_key" || action === "check_settings") {
-      // The rail is its own scroll container. Scroll it to the key vault panel.
-      keysRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-      keysRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setShelf({ open: true, tab: "keys" });
       return;
     }
     if (action === "switch_model") {
-      document.getElementById("model")?.focus();
+      setRouteOpen(true);
       return;
     }
     if (action === "dismiss") {
       setMessages((current) => current.filter((item) => item.id !== message.id));
-      return;
     }
-    keysRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const runArena = async (prompt: string, chosen: string[]): Promise<ArenaResult[]> => {
@@ -377,6 +715,7 @@ export default function App() {
             manifest,
             model,
             messages: [{ role: "user", content: prompt }],
+            systemPrompt: systemPromptText,
             ...(catalog?.providers[providerId]?.models[model]?.pricing
               ? { pricing: catalog.providers[providerId]?.models[model]?.pricing }
               : {}),
@@ -428,7 +767,7 @@ export default function App() {
       },
     ]);
     setModelId(result.model);
-    setTab("chat");
+    setView("chat");
   };
 
   const changeProvider = (next: string): void => {
@@ -445,6 +784,60 @@ export default function App() {
     setModelsNonce((value) => value + 1);
   };
 
+  const persistThreads = (next: StoredThread[]): void => {
+    setThreads(next);
+    threadsRef.current = next;
+    if (session !== null) {
+      writeThreads(accountStorage(storage, session.username), next);
+    }
+  };
+
+  const openThread = (thread: StoredThread): void => {
+    abortRef.current?.abort();
+    approvalRef.current?.("deny");
+    approvalRef.current = null;
+    setApproval(null);
+    setActiveId(thread.id);
+    setMessages(thread.messages);
+    setView("chat");
+  };
+
+  const newChat = (): void => {
+    abortRef.current?.abort();
+    const current = threadsRef.current.find((thread) => thread.id === activeId);
+    if (current !== undefined && current.messages.length === 0) {
+      setMessages([]);
+      setView("chat");
+      return;
+    }
+    const thread = createThread();
+    persistThreads(upsertThread(threadsRef.current, thread));
+    setActiveId(thread.id);
+    setMessages([]);
+    setView("chat");
+  };
+
+  const deleteThread = (id: string): void => {
+    if (streaming) {
+      return;
+    }
+    const next = removeThreadFromList(threadsRef.current, id);
+    persistThreads(next);
+    if (id !== activeId) {
+      return;
+    }
+    const fallback = next[0];
+    if (fallback === undefined) {
+      const fresh = createThread();
+      persistThreads(upsertThread(next, fresh));
+      setActiveId(fresh.id);
+      setMessages([]);
+      return;
+    }
+    setActiveId(fallback.id);
+    setMessages(fallback.messages);
+  };
+
   const enterSession = (account: SignedInAccount): void => {
     const deviceKeys = account.vault.listKeys();
     const saved = readRoute(storage, account.username);
@@ -452,17 +845,33 @@ export default function App() {
     const savedKey = saved ? deviceKeys.find((key) => key.id === saved.keyId) : undefined;
     const firstManifest = enabledManifests[0];
 
+    const accountStore = accountStorage(storage, account.username);
+    const savedThreads = readThreads(accountStore);
+    const firstThread = savedThreads[0] ?? createThread();
+    const threadList = savedThreads.length > 0 ? savedThreads : [firstThread];
+    if (savedThreads.length === 0) {
+      writeThreads(accountStore, threadList);
+    }
+
     setSession(account);
     setKeys(deviceKeys);
     setRole(ensureAccountRole({ storage }, account.username));
     setAccounts(listAccounts(storage));
     setAssignments(readAssignments({ storage }));
     setRoleError(null);
-    setMessages([]);
+    setThreads(threadList);
+    threadsRef.current = threadList;
+    setActiveId(firstThread.id);
+    setMessages(firstThread.messages);
     setTotalCost(0);
-    setTab("chat");
+    setOverBudget(false);
+    setSpentToday(readSpend(storage, utcDay()));
+    setView("chat");
     setProviderModels([]);
     setModelsError(null);
+    setConnections(readConnections(accountStore));
+    setApproval(null);
+    setFiles(new Workspace({ storage: accountStore }).files());
 
     // A new chat opens with the route that the account used last.
     if (saved !== null && savedManifest !== undefined && savedKey !== undefined) {
@@ -478,14 +887,6 @@ export default function App() {
     setKeyId(deviceKeys.find((key) => key.providerId === firstManifest?.id)?.id ?? "");
     setBaseUrl(firstManifest?.supportsCustomBaseUrl ? firstManifest.baseUrl : "");
   };
-
-  /** Keep the route for this account. The write is best effort. */
-  useEffect(() => {
-    if (session === null || !settings.rememberRoute) {
-      return;
-    }
-    writeRoute(storage, session.username, { providerId, modelId, keyId, baseUrl });
-  }, [session, providerId, modelId, keyId, baseUrl, settings.rememberRoute]);
 
   const handleSignUp = async (username: string, password: string): Promise<void> => {
     enterSession(await signUp({ storage, username, password }));
@@ -515,9 +916,19 @@ export default function App() {
     setAccounts([]);
     setAssignments([]);
     setRoleError(null);
+    setShelf({ open: false, tab: "keys" });
     setMessages([]);
+    setThreads([]);
+    setActiveId("");
+    threadsRef.current = [];
     setTotalCost(0);
+    setOverBudget(false);
     setKeyId("");
+    setConnections(null);
+    setApproval(null);
+    setFiles([]);
+    setShelf({ open: false, tab: "keys" });
+    setRouteOpen(false);
   };
 
   /** AC-04: only an account with the roles.assign key changes a role. */
@@ -569,60 +980,304 @@ export default function App() {
   }
 
   return (
-    <div className="app">
-      <SiteHeader
-        nav={
-          <nav className="tabs" role="tablist" aria-label="Workspace">
-            {TABS.map((item) => (
+    <div className="ws">
+      <header className="ws-top">
+        <span className="ws-brand">
+          <BrandLockup height={24} />
+        </span>
+
+        <div className="ws-top-tabs" role="tablist" aria-label="View">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "chat"}
+            className="ws-top-tab"
+            onClick={() => setView("chat")}
+          >
+            <Icon name="chat" size={13} />
+            Chat
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "arena"}
+            className="ws-top-tab"
+            onClick={() => setView("arena")}
+          >
+            <Icon name="arena" size={13} />
+            Arena
+          </button>
+        </div>
+
+        <div className="ws-top-actions">
+          <span className="status-chip" data-state="unlocked">
+            <span className="status-dot" />
+            {session.username}
+          </span>
+          <span className="chip mono" title="The cost of this session">
+            {formatUsd(totalCost)}
+          </span>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={theme === "dark" ? "Switch to the light theme" : "Switch to the dark theme"}
+            onClick={() => writeSettings({ theme: theme === "dark" ? "light" : "dark" })}
+          >
+            <Icon name={theme === "dark" ? "sun" : "moon"} size={15} />
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            aria-label={`Sign out of ${session.username}`}
+            onClick={signOut}
+          >
+            <Icon name="lock" size={12} />
+            Sign out
+          </button>
+        </div>
+      </header>
+
+      <div className="ws-body">
+        <aside className="ws-rail">
+          <button type="button" className="btn btn--primary btn--sm ws-new" onClick={newChat}>
+            <Icon name="plus" size={13} />
+            New chat
+          </button>
+
+          <label className="ws-search">
+            <Icon name="search" size={13} />
+            <input
+              value={search}
+              placeholder="Search chats"
+              aria-label="Search chats"
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+
+          <ol className="ws-threads">
+            {filteredThreads.map((thread) => (
+              <li key={thread.id}>
+                <button
+                  type="button"
+                  className="ws-thread"
+                  aria-current={thread.id === activeId}
+                  onClick={() => openThread(thread)}
+                >
+                  <span className="ws-thread-title">{thread.title}</span>
+                  <span className="ws-thread-preview">{threadPreview(thread) || "No message yet"}</span>
+                  <span className="ws-thread-meta">
+                    {thread.messages.length} {thread.messages.length === 1 ? "message" : "messages"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="ws-thread-del"
+                  aria-label={`Delete ${thread.title}`}
+                  onClick={() => deleteThread(thread.id)}
+                >
+                  <Icon name="trash" size={12} />
+                </button>
+              </li>
+            ))}
+          </ol>
+
+          <div className="ws-budget">
+            <div className="ws-budget-row">
+              <span>{budget.limitUsd === null ? "Today" : "Budget"}</span>
+              <strong className="mono">
+                {budget.limitUsd === null
+                  ? formatUsd(budget.spentUsd)
+                  : `${formatUsd(budget.spentUsd)} / ${formatUsd(budget.limitUsd)}`}
+              </strong>
+            </div>
+            <div className="ws-budget-bar" aria-hidden="true">
+              <span style={{ width: `${Math.min(100, Math.round(budget.ratio * 100))}%` }} />
+            </div>
+            {budgetStop ? (
+              <button type="button" className="btn btn--ghost btn--sm" onClick={() => setOverBudget(true)}>
+                Continue this session
+              </button>
+            ) : null}
+          </div>
+
+          <footer className="ws-rail-foot">
+            <span className="ws-status">
+              <span className="ws-dot" />
+              {session.username}
+              {role ? ` · ${ROLE_LABELS[role]}` : ""}
+            </span>
+            <span className="ws-status">No keyrig server · Telemetry off</span>
+            <div className="ws-rail-buttons">
+              <button type="button" onClick={() => setShelf({ open: true, tab: "keys" })}>
+                Keys
+              </button>
+              <button type="button" onClick={() => setShelf({ open: true, tab: "profile" })}>
+                Profile
+              </button>
+              {role !== null && can(role, "roles.assign") ? (
+                <button type="button" onClick={() => setShelf({ open: true, tab: "roles" })}>
+                  Roles
+                </button>
+              ) : null}
+              <Link to="/settings">Settings</Link>
+            </div>
+          </footer>
+        </aside>
+
+        <main className="ws-main">
+          <div className="ws-head">
+            <div className="ws-head-title">
+              <span className="eyebrow">{view === "chat" ? "Thread" : "Comparison"}</span>
+              <h1>{view === "chat" ? (activeThread?.title ?? "New chat") : "Model arena"}</h1>
+            </div>
+            <div className="ws-head-actions">
+              <span className={`chip ${toolsReady ? "chip--cyan" : "chip--plain"}`}>
+                <Icon name="bolt" size={10} />
+                {toolsReady ? `${activeToolNames.length} tools` : "tools off"}
+              </span>
               <button
-                key={item.id}
+                type="button"
+                className="ws-route"
+                aria-expanded={routeOpen}
+                aria-label="Provider and model"
+                onClick={() => setRouteOpen((value) => !value)}
+              >
+                <span className="ws-route-model">{modelId || "No model"}</span>
+                <span className="ws-route-provider">{manifest.displayName}</span>
+                <Icon name="chevron" size={12} />
+              </button>
+            </div>
+          </div>
+
+          {routeOpen ? (
+            <>
+              <button
+                type="button"
+                className="ws-popover-backdrop"
+                aria-label="Close the route panel"
+                onClick={() => setRouteOpen(false)}
+              />
+              <div className="ws-popover" role="dialog" aria-label="Route">
+                <button type="button" className="icon-button ws-close" aria-label="Close" onClick={() => setRouteOpen(false)}>
+                  <Icon name="plus" size={15} />
+                </button>
+                <ProfilePanel
+                  manifests={enabledManifests}
+                  manifest={manifest}
+                  providerId={providerId}
+                  onProviderChange={changeProvider}
+                  modelId={modelId}
+                  onModelChange={setModelId}
+                  models={models}
+                  catalogModel={catalogModel}
+                  keyId={keyId}
+                  keys={providerKeys}
+                  onKeyChange={setKeyId}
+                  baseUrl={baseUrl}
+                  onBaseUrlChange={setBaseUrl}
+                  baseUrlCheck={baseUrlCheck}
+                  catalogSource={catalogSource}
+                  canRoute={can(role, "route.manage")}
+                  providerModels={providerModels}
+                  modelsBusy={modelsBusy}
+                  modelsError={modelsError}
+                  onReloadModels={reloadModels}
+                />
+              </div>
+            </>
+          ) : null}
+
+          {catalogWarning !== null ? (
+            <div className="ws-warn" role="status">
+              <Icon name="alert" size={12} />
+              {catalogWarning}
+            </div>
+          ) : null}
+
+          {view === "chat" ? (
+            <ChatPanel
+              messages={messages}
+              streaming={streaming}
+              canSend={canSend}
+              blockReason={blockReason}
+              onSend={send}
+              onStop={stop}
+              onErrorAction={onErrorAction}
+              files={files}
+              contextUsed={contextUsed}
+              contextLimit={catalogModel?.contextLimit ?? null}
+              approval={approval}
+              onDecision={decideApproval}
+            />
+          ) : (
+            <ArenaPanel
+              models={models}
+              canRun={canSend && can(role, "arena.run")}
+              blockReason={
+                !can(role, "arena.run")
+                  ? "Your role cannot run the arena. Ask an owner to change your role."
+                  : blockReason
+              }
+              onRun={runArena}
+              onPick={pickArenaAnswer}
+            />
+          )}
+        </main>
+
+        <aside className="ws-inspect">
+          <div className="ws-tabs" role="tablist" aria-label="Inspector">
+            {INSPECT_TABS.map((tab) => (
+              <button
+                key={tab.id}
                 type="button"
                 role="tab"
-                className="tab"
-                aria-selected={tab === item.id}
-                onClick={() => setTab(item.id)}
+                aria-selected={inspect === tab.id}
+                className="ws-tab"
+                onClick={() => setInspect(tab.id)}
               >
-                {tab === item.id ? (
-                  <motion.span
-                    layoutId="tab-pill"
-                    className="tab-pill"
-                    transition={{ type: "spring", stiffness: 380, damping: 32 }}
-                  />
-                ) : null}
-                <Icon name={item.icon} size={15} />
-                <span className="tab-label">{item.label}</span>
+                {tab.label}
               </button>
             ))}
-          </nav>
-        }
-        actions={
-          <>
-            <span className="status-chip" data-state="unlocked" title={`Signed in as ${session.username}`}>
-              <span className="status-dot" />
-              <span>{session.username}</span>
-            </span>
-            <div className="cost-tile">
-              <span className="eyebrow">Session cost</span>
-              <motion.span
-                key={totalCost}
-                className="cost-value"
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.24 }}
-              >
-                {formatUsd(totalCost)}
-              </motion.span>
-            </div>
-            <button type="button" className="btn btn--ghost btn--sm" onClick={signOut}>
-              <Icon name="lock" size={12} />
-              Sign out
-            </button>
-          </>
-        }
-      />
+          </div>
+          <div className="ws-inspect-body">
+            {inspect === "outbound" ? (
+              <OutboundPanel
+                provider={manifest.displayName}
+                wireFormat={manifest.wireFormat}
+                endpoint={effectiveBaseUrl ?? manifest.baseUrl}
+                model={modelId}
+                keyLabel={selectedKey?.label ?? (needsKey ? null : "No key")}
+                messageCount={messages.filter((message) => message.error === undefined).length}
+                toolsOn={toolsReady}
+                toolCount={activeToolNames.length}
+                priceIn={pricing?.input ?? null}
+                priceOut={pricing?.output ?? null}
+                spent={budget.spentUsd}
+                limit={budget.limitUsd}
+              />
+            ) : inspect === "files" ? (
+              <WorkspacePanel
+                files={files}
+                onRemove={(path) => {
+                  workspace?.remove(path);
+                  refreshFiles();
+                }}
+              />
+            ) : lastTools.length > 0 ? (
+              <ToolTrace events={lastTools} open />
+            ) : (
+              <p className="hint">No tool ran in this chat. Turn the agent on in Settings to give the model a tool.</p>
+            )}
+          </div>
+        </aside>
+      </div>
 
-      <main className="shell">
-        <aside className="rail" ref={keysRef}>
+      <Shelf
+        open={shelf.open}
+        tab={shelf.tab}
+        onTab={(tab) => setShelf({ open: true, tab })}
+        onClose={() => setShelf((current) => ({ ...current, open: false }))}
+        keys={
           <KeyPanel
             vault={session.vault}
             username={session.username}
@@ -631,31 +1286,21 @@ export default function App() {
             onChanged={refreshKeys}
             canManage={can(role, "keys.manage")}
           />
-
-          <ProfilePanel
-            manifests={enabledManifests}
-            manifest={manifest}
-            providerId={providerId}
-            onProviderChange={changeProvider}
-            modelId={modelId}
-            onModelChange={setModelId}
-            models={models}
-            catalogModel={catalogModel}
-            keyId={keyId}
-            keys={providerKeys}
-            onKeyChange={setKeyId}
-            baseUrl={baseUrl}
-            onBaseUrlChange={setBaseUrl}
-            baseUrlCheck={baseUrlCheck}
-            catalogSource={catalogSource}
-            canRoute={can(role, "route.manage")}
-            providerModels={providerModels}
-            modelsBusy={modelsBusy}
-            modelsError={modelsError}
-            onReloadModels={reloadModels}
-          />
-
-          {role && can(role, "roles.assign") ? (
+        }
+        profile={
+          connections !== null ? (
+            <ConnectionsPanel
+              vault={session.vault}
+              connections={connections}
+              store={accountStorage(storage, session.username)}
+              onChanged={setConnections}
+            />
+          ) : (
+            <p className="hint">Sign in again to read the profile.</p>
+          )
+        }
+        roles={
+          role !== null && can(role, "roles.assign") ? (
             <RolesPanel
               accounts={accounts}
               assignments={assignments}
@@ -664,95 +1309,9 @@ export default function App() {
               error={roleError}
               onAssign={changeRole}
             />
-          ) : null}
-
-          {catalogWarning ? (
-            <div className="callout callout--cyan" role="status">
-              <strong>Catalog.</strong> {catalogWarning}
-            </div>
-          ) : null}
-
-          <div className="privacy">
-            <span className="privacy-icon">
-              <Icon name="shield" size={17} />
-            </span>
-            <div>
-              <strong>Keys stay local</strong>
-              <p>Encrypted in this browser with your password. No keyrig server. Telemetry is off.</p>
-            </div>
-          </div>
-        </aside>
-
-        <section className="workspace">
-          <div className="workspace-bar">
-            <div className="workspace-title">
-              <span className="eyebrow">{tab === "chat" ? "Chat workspace" : "Comparison"}</span>
-              <strong>{tab === "chat" ? (modelId || "No model") : "Model arena"}</strong>
-            </div>
-            <div className="workspace-chips">
-              <span className="chip">{manifest.displayName}</span>
-              {role ? (
-                <span className={`chip ${role === "owner" ? "chip--amber" : ""}`}>{ROLE_LABELS[role]}</span>
-              ) : null}
-              {selectedKey ? (
-                <span className="chip chip--amber">
-                  <Icon name="key" size={10} />
-                  {selectedKey.label}
-                </span>
-              ) : null}
-              <span className={`chip ${pricing ? "" : "chip--amber"}`}>
-                <Icon name="wallet" size={10} />
-                {pricing ? `${formatUsd(pricing.input)} / M in` : "price unknown"}
-              </span>
-              {tab === "chat" ? (
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--sm"
-                  disabled={messages.length === 0 || streaming}
-                  onClick={clearChat}
-                >
-                  <Icon name="plus" size={12} />
-                  New chat
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <motion.div
-            key={tab}
-            className="workspace-pane"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-          >
-            {tab === "chat" ? (
-              <ChatPanel
-                messages={messages}
-                streaming={streaming}
-                canSend={canSend}
-                blockReason={blockReason}
-                onSend={send}
-                onStop={stop}
-                onErrorAction={onErrorAction}
-              />
-            ) : (
-              <ArenaPanel
-                models={models}
-                canRun={canSend && can(role, "arena.run")}
-                blockReason={
-                  !can(role, "arena.run")
-                    ? "Your role cannot run the arena. Ask an owner to change your role."
-                    : blockReason
-                }
-                onRun={runArena}
-                onPick={pickArenaAnswer}
-              />
-            )}
-          </motion.div>
-        </section>
-      </main>
-
-      <SiteFooter />
+          ) : null
+        }
+      />
     </div>
   );
 }

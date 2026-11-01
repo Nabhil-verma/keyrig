@@ -2,7 +2,7 @@ import type { KeyView } from "@keyrig/core";
 import type { BaseUrlCheck, CatalogModel, CatalogSource, ProviderManifest } from "@keyrig/providers";
 import { formatUsd } from "@keyrig/providers";
 import { ModelPicker } from "./ModelPicker";
-import { Icon } from "./ui/Icon";
+import { Icon } from "../ui/Icon";
 
 interface ProfilePanelProps {
   manifests: readonly ProviderManifest[];
