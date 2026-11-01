@@ -168,22 +168,28 @@ The local server also streams slowly for a prompt that contains the word `slow`.
 ```text
 keyrig code/
 ├── apps/
-│   └── web/                   The browser app (React, Vite, Framer Motion)
+│   └── web/                    The browser app (React, Vite, Framer Motion)
+│       ├── index.html          The HTML shell. It loads src/app/main.tsx
+│       ├── public/             Brand files and fonts
 │       └── src/
-│           ├── Site.tsx       Routes, page transitions and the scroll progress bar
-│           ├── router.tsx     A small history router and the Link component
-│           ├── SiteChrome.tsx The shared header and footer
-│           ├── pages/         Home, providers and security pages
-│           ├── App.tsx        The workspace: sign-in, keys, route, chat and arena
-│           ├── ChatPanel.tsx  Messages, provenance chips and the composer
-│           └── styles.css     The design system and the page styles
+│           ├── app/            The shell: the entry, the routes and the page host
+│           ├── pages/          The four public pages
+│           ├── components/     The workspace panels, cards and drawers
+│           ├── ui/             The brand marks and the icon set
+│           ├── stores/         Saved state in this browser
+│           ├── services/       Calls that leave the app: providers, OAuth, MCP
+│           ├── lib/            Pure helpers with no saved state
+│           └── styles/         The design system and the workspace styles
 ├── packages/
-│   ├── shared/                Error contract, redaction and schema versions
-│   ├── providers/             Manifests, catalog, cost, errors and wire formats
-│   └── core/                  Key vault, keyring, usage bus and chat orchestration
-├── docs/                      Architecture, product rules, style, glossary and test plan
-└── tools/                     The layer check and the fake provider
+│   ├── shared/                 Error contract, redaction and schema versions
+│   ├── providers/              Manifests, catalog, cost, errors and wire formats
+│   └── core/                   Key vault, accounts, roles, tools and chat orchestration
+├── docs/                       Architecture, the file map, product rules, style and test plan
+├── e2e/                        The Playwright browser tests
+└── tools/                      The layer check and the two local test servers
 ```
+
+[docs/MAP.md](docs/MAP.md) names each file and its job. Read it first when you look for a file.
 
 ---
 
@@ -336,6 +342,7 @@ Short version:
 
 | Document | Contents |
 |---|---|
+| [docs/MAP.md](docs/MAP.md) | The file map: where each file is and what it does. |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layers, the request path and the key path. |
 | [docs/PRODUCT_RULES.md](docs/PRODUCT_RULES.md) | The product rules PR-01 to PR-05. |
 | [docs/STYLE.md](docs/STYLE.md) | The writing style for all keyrig text. |

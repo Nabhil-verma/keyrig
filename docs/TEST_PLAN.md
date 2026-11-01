@@ -294,7 +294,7 @@ server. The route panel used the provider **OpenAI-compatible** with the base UR
 | PV-11 a custom name | Pass. `Custom model name` opened a text field. `Use the list` opened the list again. |
 | PV-11 a provider with no list | Pass. **OpenAI** kept the text field, showed no reload button, kept `gpt-5.4`, and started no request. |
 | PV-11 one request for an edited base URL | Pass. One request started after the typing stopped, not one for each keystroke. |
-| Unit tests | Pass. `npm test` runs `modelOptions` in `apps/web/src/modelOptions.test.ts`. |
+| Unit tests | Pass. `npm test` runs `modelOptions` in `apps/web/src/lib/modelOptions.test.ts`. |
 | PV-11 the live preview | Pass for the error state. On the published preview, the browser blocks a request to a local address from a public origin (private network access). The picker kept the text field, showed `keyrig cannot reach the provider` and kept `Reload the models`. The browser test in the table above ran on the development origin, where the browser allows the local request. |
 
 ## Route and motion checks (2026-10-23)
@@ -326,8 +326,8 @@ The preview ran on a public HTTPS origin with the production build and the Worke
 | AS-06 the prompt goes first and is never sent twice | `prompts.test.ts`: "puts the prompt first and never adds it twice"; `chat.test.ts`: "sends the guard prompt first and keeps the user turn after it" |
 | AS-06 and KS-03 a key in the user block is masked | `prompts.test.ts`: "masks a key in the user block"; `chat.test.ts`: "does not send a key that a user pasted into the instructions" |
 | CO-02 the warning at 80 percent and the stop at 100 percent | `packages/core/src/tests/budget.test.ts`: "warns at 80 percent and stops at 100 percent" |
-| CO-02 the day record keeps the spend across a reload | `apps/web/src/spendStore.test.ts`: "adds the costs of the day" |
-| PV-08 one render for each frame, not for each token | `apps/web/src/deltaBuffer.test.ts`: "joins many deltas into one flush per frame" |
+| CO-02 the day record keeps the spend across a reload | `apps/web/src/stores/spendStore.test.ts`: "adds the costs of the day" |
+| PV-08 one render for each frame, not for each token | `apps/web/src/lib/deltaBuffer.test.ts`: "joins many deltas into one flush per frame" |
 
 ## Performance (2026-11-01)
 
@@ -336,7 +336,7 @@ by eye.
 
 | Check | Command |
 |---|---|
-| One render for each frame of a stream | `apps/web/src/deltaBuffer.test.ts` |
+| One render for each frame of a stream | `apps/web/src/lib/deltaBuffer.test.ts` |
 | The chunk sizes | `npm run build` |
 
 ## Agent tools, approvals and connections (2026-11-01)
@@ -352,7 +352,7 @@ by eye.
 | AS-01 a tool that cannot run now is blocked with a reason | `agent.test.ts`: "stops a call to a tool that cannot run now" |
 | AS-01 a stopped turn starts nothing | `agent.test.ts`: "does not start when the user stopped the turn" |
 | AS-02 a path must stay inside the workspace | `tools.test.ts`: "refuses an absolute path"; "refuses a path that climbs out of the workspace" |
-| AS-02 key files, dot env files and secret-like names are protected | `tools.test.ts`: "protects a dot env file, a key file, a key folder and a token name"; `apps/web/src/workspace.test.ts`: "refuses a protected path (AS-02)" |
+| AS-02 key files, dot env files and secret-like names are protected | `tools.test.ts`: "protects a dot env file, a key file, a key folder and a token name"; `apps/web/src/stores/workspace.test.ts`: "refuses a protected path (AS-02)" |
 | MC-05 an unknown field, a missing field, bad JSON or a wrong type is an error | `tools.test.ts`: "refuses an unknown field"; "refuses a missing field"; "refuses text that is not JSON"; "refuses a value of the wrong type" |
 | MC-04 every tool states its effect | `tools.test.ts`: "states the effect of each tool (MC-04)" |
 | AS-01 a read needs no yes, a write asks, a delete and a commit always ask | `tools.test.ts`: "runs a read with no question"; "asks before a write unless the user turned auto approval on"; "always asks for a delete and for a commit" |
@@ -364,7 +364,7 @@ by eye.
 | The recovery email is a Gmail address | `packages/core/src/tests/identity.test.ts`: "refuses another domain"; "reads a verified Gmail token" |
 | The Google token must match the client id, the expiry and the verified address | `identity.test.ts`: "refuses another client id"; "refuses an expired token"; "refuses an address that Google did not verify" |
 | The GitHub device flow reads a code and a token | `identity.test.ts`: "reads a device code"; "reads a token and a pending answer" |
-| The workspace keeps, replaces, searches and limits a file | `apps/web/src/workspace.test.ts`: all cases |
-| The agent is off until the user reads the risk list | `apps/web/src/toolSettings.test.ts`: "gives no tool before the user reads the risk list"; "gives the tools after the user reads the risk list" |
-| A commit needs a connected account and a repository | `apps/web/src/connections.test.ts`: "needs a login and a repository before a commit is allowed" |
+| The workspace keeps, replaces, searches and limits a file | `apps/web/src/stores/workspace.test.ts`: all cases |
+| The agent is off until the user reads the risk list | `apps/web/src/stores/toolSettings.test.ts`: "gives no tool before the user reads the risk list"; "gives the tools after the user reads the risk list" |
+| A commit needs a connected account and a repository | `apps/web/src/stores/connections.test.ts`: "needs a login and a repository before a commit is allowed" |
 | three.js loads only for a scene | `npm run build` shows `three` in its own chunk, and `apps/web/dist/index.html` preloads only the entry, the runtime, React and the motion library. |

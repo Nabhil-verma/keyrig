@@ -18,6 +18,9 @@ apps/web  ->  core  ->  providers  ->  shared
 
 `node tools/check-layers.mjs` reads every import and fails on an upward import.
 
+[MAP.md](MAP.md) names each folder, each file and its job. Read it first when
+you look for a file.
+
 ## Data path (PV-03)
 
 Each request goes through three steps. Do not merge the steps.

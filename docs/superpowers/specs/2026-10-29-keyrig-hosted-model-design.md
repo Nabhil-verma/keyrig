@@ -126,7 +126,7 @@ The token can spend money on the owner's account. Rotating it is a one-step secr
 | `sites-preview/worker.mjs` | Two routes before the asset fallback. |
 | `sites-preview/manifest.json` | The `DB` binding, if the deploy needs it declared. |
 | `packages/providers/src/builtins.ts` | One manifest, `keyrig-hosted`, `openai-chat`, `priceSource: "none"`. |
-| `apps/web/src/styles.css` | The card note: keyrig pays, the prompt leaves the browser. |
+| `apps/web/src/styles/styles.css` | The card note: keyrig pays, the prompt leaves the browser. |
 | `docs/DECISIONS.md` | D-04 corrected in place. |
 | `docs/TEST_PLAN.md` | The new checks. |
 

@@ -65,11 +65,11 @@ One document holds the role of each account:
 
 | Place | Key | Result without the key |
 |---|---|---|
-| `apps/web/src/App.tsx` | `chat.send` | The composer is disabled and shows a reason. |
-| `apps/web/src/App.tsx` | `arena.run` | The arena run button is disabled and shows a reason. |
-| `apps/web/src/KeyPanel.tsx` | `keys.manage` | The key fields and the buttons are disabled. |
-| `apps/web/src/ProfilePanel.tsx` | `route.manage` | The provider, model, key and base URL fields are disabled. |
-| `apps/web/src/RolesPanel.tsx` | `roles.assign` | The panel is hidden. |
+| `apps/web/src/app/WorkspaceScreen.tsx` | `chat.send` | The composer is disabled and shows a reason. |
+| `apps/web/src/app/WorkspaceScreen.tsx` | `arena.run` | The arena run button is disabled and shows a reason. |
+| `apps/web/src/components/KeyPanel.tsx` | `keys.manage` | The key fields and the buttons are disabled. |
+| `apps/web/src/components/ProfilePanel.tsx` | `route.manage` | The provider, model, key and base URL fields are disabled. |
+| `apps/web/src/components/RolesPanel.tsx` | `roles.assign` | The panel is hidden. |
 
 The core keeps the last line of defense. `assignRole` and `revokeRole` throw the `role_forbidden` error
 when the actor has no `roles.assign` key or breaks a rule.
