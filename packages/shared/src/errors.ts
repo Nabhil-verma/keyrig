@@ -27,6 +27,7 @@ export const REMEDIATION_ACTIONS = [
   "wait",
   "switch_model",
   "check_key",
+  "use_other_key",
   "reduce_context",
   "change_prompt",
   "check_network",

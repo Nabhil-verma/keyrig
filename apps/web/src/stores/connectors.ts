@@ -26,13 +26,13 @@ export interface Connector {
   consentAt?: string;
 }
 
-export const CONNECTORS_STORAGE_KEY = "keyrig.connectors.v1";
-export const CONNECTORS_SCHEMA_VERSION = 1;
-export const MAX_CONNECTORS = 25;
-export const MAX_CONNECTOR_TOOLS = 100;
-export const MAX_ALLOWED_TOOLS = 50;
-export const CONNECTOR_NAME_LIMIT = 60;
-export const CONNECTOR_URL_LIMIT = 500;
+const CONNECTORS_STORAGE_KEY = "keyrig.connectors.v1";
+const CONNECTORS_SCHEMA_VERSION = 1;
+const MAX_CONNECTORS = 25;
+const MAX_CONNECTOR_TOOLS = 100;
+const MAX_ALLOWED_TOOLS = 50;
+const CONNECTOR_NAME_LIMIT = 60;
+const CONNECTOR_URL_LIMIT = 500;
 const TOOL_NAME_LIMIT = 120;
 const TOOL_DESCRIPTION_LIMIT = 400;
 

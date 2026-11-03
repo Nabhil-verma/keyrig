@@ -6,9 +6,9 @@
  * text and the box keeps the short form.
  */
 
-export const MAX_CONTEXT_CHARS = 20_000;
+const MAX_CONTEXT_CHARS = 20_000;
 
-export interface ComposerToken {
+interface ComposerToken {
   /** `/` for a skill, `@` for a file. */
   kind: "skill" | "file";
   /** The text after the marker. */

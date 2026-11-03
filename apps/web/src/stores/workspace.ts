@@ -16,9 +16,9 @@ import { KeyrigError, createDocument, isVersionedDocument, type StorageLike } fr
  * size check, so one turn cannot fill the storage.
  */
 
-export const WORKSPACE_STORAGE_KEY = "keyrig.workspace.v1";
-export const WORKSPACE_SCHEMA_VERSION = 1;
-export const MAX_SEARCH_MATCHES = 40;
+const WORKSPACE_STORAGE_KEY = "keyrig.workspace.v1";
+const WORKSPACE_SCHEMA_VERSION = 1;
+const MAX_SEARCH_MATCHES = 40;
 
 export interface WorkspaceFile {
   path: string;
@@ -26,7 +26,7 @@ export interface WorkspaceFile {
   updatedAt: string;
 }
 
-export interface SearchMatch {
+interface SearchMatch {
   path: string;
   line: number;
   text: string;
@@ -37,7 +37,7 @@ function fail(code: string, message: string): never {
 }
 
 /** AS-02: the path is relative and it is not a secret. */
-export function checkWorkspacePath(raw: unknown): string {
+function checkWorkspacePath(raw: unknown): string {
   const path = normalizeWorkspacePath(raw);
   const reason = protectedReason(path);
   if (reason !== null) {

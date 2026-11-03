@@ -7,7 +7,9 @@
  * Then use the OpenAI-compatible provider with base URL http://127.0.0.1:8788/v1.
  *
  * A key that starts with "bad-key" gets status 401. A prompt with "slow" gets
- * one chunk each second, so the Stop button is easy to test.
+ * one chunk each second, so the Stop button is easy to test. The prompts
+ * "rate-limit", "server-error" and "context-overflow" return the matching
+ * failure, so the error cards have a test.
  */
 import { createServer } from "node:http";
 
@@ -17,6 +19,8 @@ const CORS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, OPTIONS",
   "access-control-allow-headers": "authorization, content-type",
+  // A browser hides Retry-After from another origin unless the server lists it.
+  "access-control-expose-headers": "retry-after",
 };
 
 const server = createServer((request, response) => {
@@ -70,6 +74,38 @@ const server = createServer((request, response) => {
     } catch {
       response.writeHead(400, { ...CORS, "content-type": "application/json" });
       response.end(JSON.stringify({ error: { message: "Bad JSON", code: "invalid_json" } }));
+      return;
+    }
+
+    // The error paths for the e2e tests. The prompt picks the failure.
+    const lowerPrompt = String(prompt).toLowerCase();
+    if (lowerPrompt.includes("rate-limit")) {
+      response.writeHead(429, { ...CORS, "content-type": "application/json", "retry-after": "2" });
+      response.end(
+        JSON.stringify({
+          error: { message: "Rate limit reached.", type: "rate_limit_error", code: "rate_limit_exceeded" },
+        }),
+      );
+      return;
+    }
+    if (lowerPrompt.includes("server-error")) {
+      response.writeHead(503, { ...CORS, "content-type": "application/json" });
+      response.end(
+        JSON.stringify({ error: { message: "The server is busy.", type: "server_error", code: "overloaded" } }),
+      );
+      return;
+    }
+    if (lowerPrompt.includes("context-overflow")) {
+      response.writeHead(400, { ...CORS, "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          error: {
+            message: "This model's maximum context length is 8192 tokens.",
+            type: "invalid_request_error",
+            code: "context_length_exceeded",
+          },
+        }),
+      );
       return;
     }
 

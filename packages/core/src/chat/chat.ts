@@ -1,4 +1,4 @@
-import { KeyrigError } from "@keyrig/shared";
+import { KeyrigError, createId } from "@keyrig/shared";
 import {
   estimateCost,
   runChat,
@@ -15,10 +15,9 @@ import type { KeyView, KeyVault } from "../keys/vault";
 import type { UsageBus, UsageEvent } from "./usage";
 
 /**
- * One chat turn through the core. The core owns these rules:
- * - PV-09: retry an empty reply one time. Do not retry a turn that ran a tool.
- * - CO-01: attach the estimated cost to the result.
- * - CO-04: emit one usage event after the call.
+ * One chat turn through the core.
+ * - PV-09: retry an empty reply one time, and never after a tool ran.
+ * - CO-01 and CO-04: attach the estimated cost and emit one usage event.
  * - PR-02: return the key label with the result.
  */
 export interface SendChatOptions {
@@ -30,7 +29,7 @@ export interface SendChatOptions {
   messages: readonly ChatMessage[];
   /** AS-06: the guard prompt. The core puts it first in the message list. */
   systemPrompt?: string;
-  /** AS-01: the tools that the model can ask for. The agent loop validates each call. */
+  /** AS-01: the tools that the model can ask for. */
   tools?: readonly ToolSpec[];
   pricing?: Pricing;
   bus?: UsageBus;
@@ -55,13 +54,6 @@ export interface ChatOutcome {
   cacheState: "hit" | "none";
 }
 
-function newId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `usage_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
 function isEmptyReply(result: ChatResult): boolean {
   return result.text.trim().length === 0 && !result.aborted && result.stopReason === "complete";
 }
@@ -70,23 +62,27 @@ export async function sendChat(options: SendChatOptions): Promise<ChatOutcome> {
   const { vault, manifest, model } = options;
   const keyId = options.keyId ?? "";
 
-  let key: KeyView | null = null;
-  let secret = "";
+  const keyNotFound = (): KeyrigError =>
+    KeyrigError.fromCategory("auth", {
+      code: "key_not_found",
+      message: "keyrig cannot find this key. Add the key again.",
+    });
 
-  if (keyId.length > 0) {
-    key = vault.getKeyView(keyId) ?? null;
-    if (!key) {
-      throw KeyrigError.fromCategory("auth", {
-        code: "key_not_found",
-        message: "keyrig cannot find this key. Add the key again.",
-      });
+  const readKey = (): { key: KeyView | null; secret: string } => {
+    if (keyId.length === 0) {
+      if (manifest.authType === "api-key") {
+        throw KeyrigError.fromCategory("auth", {
+          code: "key_required",
+          message: "This provider needs a key. Add one first.",
+          action: "check_key",
+        });
+      }
+      return { key: null, secret: "" };
     }
-    secret = vault.getSecret(keyId) ?? "";
-    if (!secret) {
-      throw KeyrigError.fromCategory("auth", {
-        code: "key_not_found",
-        message: "keyrig cannot find this key. Add the key again.",
-      });
+    const key = vault.getKeyView(keyId) ?? null;
+    const secret = key ? (vault.getSecret(keyId) ?? "") : "";
+    if (!key || secret.length === 0) {
+      throw keyNotFound();
     }
     if (key.providerId !== manifest.id) {
       throw KeyrigError.fromCategory("invalid_request", {
@@ -95,13 +91,10 @@ export async function sendChat(options: SendChatOptions): Promise<ChatOutcome> {
         action: "check_key",
       });
     }
-  } else if (manifest.authType === "api-key") {
-    throw KeyrigError.fromCategory("auth", {
-      code: "key_required",
-      message: "This provider needs a key. Add one first.",
-      action: "check_key",
-    });
-  }
+    return { key, secret };
+  };
+
+  const { key, secret } = readKey();
 
   // AS-06: the guard prompt goes first, so text inside the turn cannot replace it.
   const messages =
@@ -109,8 +102,8 @@ export async function sendChat(options: SendChatOptions): Promise<ChatOutcome> {
       ? options.messages
       : withSystemPrompt(options.messages, options.systemPrompt);
 
-  const call = async (): Promise<ChatResult> =>
-    runChat({
+  const runOnce = async (): Promise<ChatResult> => {
+    const result = await runChat({
       manifest,
       config: {
         apiKey: secret,
@@ -128,15 +121,15 @@ export async function sendChat(options: SendChatOptions): Promise<ChatOutcome> {
       },
       ...(options.handlers !== undefined ? { handlers: options.handlers } : {}),
     });
+    if (result.stopReason === "filtered") {
+      throw KeyrigError.fromCategory("content_filter");
+    }
+    return result;
+  };
 
-  let result = await call();
-
-  if (result.stopReason === "filtered") {
-    throw KeyrigError.fromCategory("content_filter");
-  }
-
+  let result = await runOnce();
   if (isEmptyReply(result) && options.toolRan !== true) {
-    result = await call();
+    result = await runOnce();
     if (isEmptyReply(result)) {
       throw KeyrigError.fromCategory("empty_reply", {
         code: "empty_reply_twice",
@@ -145,19 +138,17 @@ export async function sendChat(options: SendChatOptions): Promise<ChatOutcome> {
         action: "switch_model",
       });
     }
-    if (result.stopReason === "filtered") {
-      throw KeyrigError.fromCategory("content_filter");
-    }
   }
 
   const cost = estimateCost(result.usage, options.pricing);
-  const at = new Date(options.now?.() ?? Date.now()).toISOString();
+  const usedAt = options.now?.() ?? Date.now();
+  const at = new Date(usedAt).toISOString();
   if (keyId.length > 0) {
-    await vault.markUsed(keyId, Date.parse(at));
+    await vault.markUsed(keyId, usedAt);
   }
 
   const usageEvent: UsageEvent = {
-    id: newId(),
+    id: createId("usage_"),
     at,
     providerId: manifest.id,
     model: result.model,

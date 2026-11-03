@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyrigScene } from "@keyrig/core";
+import { Icon } from "./ui/Icon";
 
 /**
  * keyrig renders the scene. The model sends data only, so a scene cannot run
@@ -7,6 +8,8 @@ import type { KeyrigScene } from "@keyrig/core";
  */
 export function SceneView({ scene }: { scene: KeyrigScene }) {
   const host = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -29,7 +32,8 @@ export function SceneView({ scene }: { scene: KeyrigScene }) {
           return { width, height: Math.min(Math.max(Math.round(width * 0.62), 220), 420) };
         };
         const size = measure();
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        // The buffer stays, so the user can save the scene as an image.
+        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         renderer.setSize(size.width, size.height, false);
         renderer.domElement.style.width = "100%";
@@ -115,6 +119,8 @@ export function SceneView({ scene }: { scene: KeyrigScene }) {
         let lastX = 0;
         let lastY = 0;
         const canvas = renderer.domElement;
+        canvasRef.current = canvas;
+        setReady(true);
 
         const onDown = (event: PointerEvent): void => {
           dragging = true;
@@ -177,6 +183,7 @@ export function SceneView({ scene }: { scene: KeyrigScene }) {
           }
           renderer.dispose();
           canvas.remove();
+          canvasRef.current = null;
         };
       } catch {
         if (!disposed) {
@@ -191,6 +198,25 @@ export function SceneView({ scene }: { scene: KeyrigScene }) {
     };
   }, [scene]);
 
+  /** Save one frame of the scene. The file stays on this device. */
+  const saveImage = (): void => {
+    const canvas = canvasRef.current;
+    if (canvas === null) {
+      return;
+    }
+    canvas.toBlob((blob) => {
+      if (blob === null) {
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "keyrig-scene.png";
+      link.click();
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  };
+
   return (
     <figure className="scene">
       <figcaption className="scene-head">
@@ -199,6 +225,15 @@ export function SceneView({ scene }: { scene: KeyrigScene }) {
         <span className="chip">
           {scene.nodes.length} {scene.nodes.length === 1 ? "node" : "nodes"}
         </span>
+        <button
+          type="button"
+          className="btn btn--quiet btn--sm scene-save"
+          disabled={!ready}
+          onClick={saveImage}
+        >
+          <Icon name="download" size={12} />
+          Save image
+        </button>
       </figcaption>
       <div className="scene-canvas" ref={host} />
       {error !== null ? <p className="hint">{error}</p> : <p className="hint">Drag to turn the scene. Use the wheel to zoom.</p>}

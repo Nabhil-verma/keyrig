@@ -7,9 +7,9 @@
  * run the app from their own OAuth apps.
  */
 
-export const OAUTH_STORAGE_KEY = "keyrig.oauth.v1";
+const OAUTH_STORAGE_KEY = "keyrig.oauth.v1";
 
-export interface OAuthConfig {
+interface OAuthConfig {
   googleClientId: string;
   githubClientId: string;
 }
@@ -29,7 +29,7 @@ function fromEnv(): OAuthConfig {
   };
 }
 
-export function normalizeOAuthConfig(input: unknown): OAuthConfig {
+function normalizeOAuthConfig(input: unknown): OAuthConfig {
   const source = input !== null && typeof input === "object" ? (input as Record<string, unknown>) : {};
   return {
     googleClientId: typeof source.googleClientId === "string" ? source.googleClientId.trim() : "",

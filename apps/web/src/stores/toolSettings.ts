@@ -10,8 +10,8 @@ import { createMemoryStorage, type StorageLike } from "@keyrig/shared";
  * tool changes.
  */
 
-export const AGENT_SETTINGS_STORAGE_KEY = "keyrig.agent.v1";
-export const AGENT_SETTINGS_SCHEMA_VERSION = 1;
+const AGENT_SETTINGS_STORAGE_KEY = "keyrig.agent.v1";
+const AGENT_SETTINGS_SCHEMA_VERSION = 1;
 /** Bump this number when the risk of a tool changes, so the user reads it again. */
 export const AGENT_RISK_VERSION = 1;
 
@@ -25,7 +25,7 @@ export interface AgentSettings {
   acknowledgedVersion: number;
 }
 
-export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
+const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   enabled: false,
   enabledTools: [...READ_TOOLS],
   autoApproveWrites: false,
@@ -88,7 +88,7 @@ export function getAgentSettings(): AgentSettings {
   return snapshot;
 }
 
-export function subscribeAgentSettings(listener: () => void): () => void {
+function subscribeAgentSettings(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }

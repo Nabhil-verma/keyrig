@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { formatUsd, type CatalogModel } from "@keyrig/providers";
 import { ErrorCard } from "./ErrorCard";
 import { fadeUp, stagger } from "../lib/motion";
-import type { ArenaResult } from "../lib/types";
+import type { ArenaResult, ArenaRun } from "../lib/types";
 import { Icon } from "./ui/Icon";
 
 interface ArenaPanelProps {
@@ -12,14 +12,22 @@ interface ArenaPanelProps {
   blockReason: string | null;
   onRun: (prompt: string, models: string[]) => Promise<ArenaResult[]>;
   onPick: (prompt: string, result: ArenaResult) => void;
+  /** UX-01: the saved run of the open chat. */
+  saved?: ArenaRun | null;
 }
 
-export function ArenaPanel({ models, canRun, blockReason, onRun, onPick }: ArenaPanelProps) {
-  const [prompt, setPrompt] = useState("");
+export function ArenaPanel({ models, canRun, blockReason, onRun, onPick, saved = null }: ArenaPanelProps) {
+  const [prompt, setPrompt] = useState(saved?.prompt ?? "");
   const [manual, setManual] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
-  const [results, setResults] = useState<ArenaResult[]>([]);
+  const [results, setResults] = useState<ArenaResult[]>(saved?.results ?? []);
   const [running, setRunning] = useState(false);
+
+  // A saved run comes back with its chat. A run in flight is not replaced.
+  useEffect(() => {
+    setPrompt(saved?.prompt ?? "");
+    setResults(saved?.results ?? []);
+  }, [saved]);
 
   const manualModels = manual
     .split(/[\n,]/)

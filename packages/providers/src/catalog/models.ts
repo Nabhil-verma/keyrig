@@ -1,13 +1,11 @@
 import { KeyrigError } from "@keyrig/shared";
-import { classifyNetworkFailure, providerHttpError } from "../wire/classify";
-import { checkBaseUrl, joinUrl, type ProviderManifest } from "../manifests/manifest";
+import { joinUrl, type ProviderManifest } from "../manifests/manifest";
+import { fetchProvider, prepareCall } from "../wire/request";
 import type { ProviderCallConfig } from "../wire/types";
 
 /**
  * PV-11: read the model list from the provider when its manifest allows it.
- *
- * The list is a convenience. A provider that does not list its models keeps
- * the typed model name. The key is used for this request only.
+ * The list is a convenience. A provider without a list keeps the typed name.
  */
 
 export const MODEL_LIST_TIMEOUT_MS = 15_000;
@@ -26,25 +24,21 @@ export interface ModelListResult {
 const ANTHROPIC_VERSION = "2023-06-01";
 
 function listUrl(manifest: ProviderManifest, baseUrl: string): string {
-  if (manifest.wireFormat === "ollama-chat") {
-    return joinUrl(baseUrl, "api/tags");
-  }
-  return joinUrl(baseUrl, "models");
+  return joinUrl(baseUrl, manifest.wireFormat === "ollama-chat" ? "api/tags" : "models");
 }
 
 function listHeaders(manifest: ProviderManifest, apiKey: string): Record<string, string> {
-  const headers: Record<string, string> = { accept: "application/json" };
   if (manifest.wireFormat === "anthropic-messages") {
-    if (apiKey.length > 0) {
-      headers["x-api-key"] = apiKey;
-    }
-    headers["anthropic-version"] = ANTHROPIC_VERSION;
-    return headers;
+    return {
+      accept: "application/json",
+      ...(apiKey.length > 0 ? { "x-api-key": apiKey } : {}),
+      "anthropic-version": ANTHROPIC_VERSION,
+    };
   }
-  if (apiKey.length > 0) {
-    headers.authorization = `Bearer ${apiKey}`;
-  }
-  return headers;
+  return {
+    accept: "application/json",
+    ...(apiKey.length > 0 ? { authorization: `Bearer ${apiKey}` } : {}),
+  };
 }
 
 function modelIdOf(item: unknown): string | null {
@@ -70,14 +64,14 @@ export function readModelList(payload: unknown): string[] {
   }
   const record = payload as { data?: unknown; models?: unknown };
   const list = Array.isArray(record.data) ? record.data : Array.isArray(record.models) ? record.models : [];
-  const seen = new Set<string>();
+  const ids = new Set<string>();
   for (const item of list) {
     const id = modelIdOf(item);
     if (id !== null) {
-      seen.add(id);
+      ids.add(id);
     }
   }
-  return [...seen].sort((left, right) => left.localeCompare(right)).slice(0, MODEL_LIST_LIMIT);
+  return [...ids].sort((left, right) => left.localeCompare(right)).slice(0, MODEL_LIST_LIMIT);
 }
 
 export async function listModels(options: ModelListOptions): Promise<ModelListResult> {
@@ -91,69 +85,11 @@ export async function listModels(options: ModelListOptions): Promise<ModelListRe
     });
   }
 
-  const apiKey = config.apiKey?.trim() ?? "";
-  if (manifest.authType === "api-key" && apiKey.length === 0) {
-    throw KeyrigError.fromCategory("auth", {
-      code: "missing_api_key",
-      message: "keyrig has no key for this provider. Add a key and try again.",
-    });
-  }
-
-  const baseUrl = config.baseUrl && config.baseUrl.trim().length > 0 ? config.baseUrl.trim() : manifest.baseUrl;
-  const urlCheck = checkBaseUrl(baseUrl);
-  if (!urlCheck.allowed) {
-    throw KeyrigError.fromCategory("invalid_request", {
-      code: "blocked_base_url",
-      message: urlCheck.warning ?? "keyrig blocked the base URL.",
-      details: { reason: urlCheck.reason },
-    });
-  }
-
-  const secrets = apiKey.length > 0 ? [apiKey] : [];
-  const timeoutMs = config.timeoutMs ?? MODEL_LIST_TIMEOUT_MS;
-  let timedOut = false;
-  let timeoutSignal: AbortSignal | undefined;
-  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
-    timeoutSignal = AbortSignal.timeout(timeoutMs);
-    timeoutSignal.addEventListener("abort", () => {
-      timedOut = true;
-    }, { once: true });
-  }
-  const signal =
-    config.signal && timeoutSignal
-      ? AbortSignal.any([config.signal, timeoutSignal])
-      : (config.signal ?? timeoutSignal);
-
-  const fetchImpl = config.fetchImpl ?? fetch;
-  let response: Response;
-  try {
-    response = await fetchImpl(listUrl(manifest, baseUrl), {
-      method: "GET",
-      headers: { ...listHeaders(manifest, apiKey), ...(config.headers ?? {}) },
-      ...(signal ? { signal } : {}),
-    });
-  } catch (error) {
-    if (config.signal?.aborted === true) {
-      throw KeyrigError.fromCategory("cancelled");
-    }
-    if (timedOut) {
-      throw KeyrigError.fromCategory("timeout", { details: { timeoutMs } });
-    }
-    throw classifyNetworkFailure(error, {
-      ...(manifest.networkHint !== undefined ? { networkHint: manifest.networkHint } : {}),
-      secrets,
-    });
-  }
-
-  if (!response.ok) {
-    let body = "";
-    try {
-      body = (await response.text()).slice(0, 4096);
-    } catch {
-      body = "";
-    }
-    throw providerHttpError(response.status, body, { response, secrets });
-  }
+  const call = prepareCall(manifest, config, MODEL_LIST_TIMEOUT_MS);
+  const response = await fetchProvider(call, manifest, listUrl(manifest, call.baseUrl), {
+    method: "GET",
+    headers: { ...listHeaders(manifest, call.apiKey), ...(config.headers ?? {}) },
+  });
 
   let payload: unknown;
   try {

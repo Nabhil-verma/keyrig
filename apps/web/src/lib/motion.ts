@@ -8,11 +8,6 @@ export const fadeUp: Variants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE_OUT } },
 };
 
-export const fadeIn: Variants = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { duration: 0.5, ease: EASE_OUT } },
-};
-
 /** A parent variant that reveals its children one after another. */
 export function stagger(gap = 0.08, delay = 0.05): Variants {
   return {

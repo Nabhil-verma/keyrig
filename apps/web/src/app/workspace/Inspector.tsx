@@ -1,5 +1,6 @@
-import type { AgentEvent } from "@keyrig/core";
+import type { AgentEvent, UsageEvent } from "@keyrig/core";
 import type { WorkspaceFile } from "../../stores/workspace";
+import type { SpendDay } from "../../stores/spendStore";
 import { OutboundPanel } from "../../components/OutboundPanel";
 import { ToolTrace } from "../../components/ToolTrace";
 import { WorkspacePanel } from "../../components/WorkspacePanel";
@@ -27,6 +28,8 @@ interface InspectorProps {
   priceOut: number | null;
   spent: number;
   limit: number | null;
+  days: SpendDay[];
+  requests: UsageEvent[];
   files: WorkspaceFile[];
   onRemoveFile: (path: string) => void;
   tools: AgentEvent[];
@@ -48,6 +51,8 @@ export function Inspector({
   priceOut,
   spent,
   limit,
+  days,
+  requests,
   files,
   onRemoveFile,
   tools,
@@ -83,6 +88,8 @@ export function Inspector({
             priceOut={priceOut}
             spent={spent}
             limit={limit}
+            days={days}
+            requests={requests}
           />
         ) : tab === "files" ? (
           <WorkspacePanel files={files} onRemove={onRemoveFile} />

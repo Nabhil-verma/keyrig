@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { motion } from "framer-motion";
 import type { AgentApprovalRequest } from "@keyrig/core";
 import { formatUsd } from "@keyrig/providers";
@@ -25,6 +25,8 @@ interface ChatPanelProps {
   files: WorkspaceFile[];
   contextUsed: number;
   contextLimit: number | null;
+  /** The input price of the selected model, for the cost before the send. */
+  priceIn: number | null;
   approval: AgentApprovalRequest | null;
   onDecision: (decision: "approve" | "deny") => void;
 }
@@ -53,6 +55,34 @@ function priceText(message: UIMessage): string | null {
   return message.pricingKnown ? `${formatUsd(message.costUsd, true)} est.` : "price unknown";
 }
 
+/** The list under the composer for the open `/` skill or `@` file token. */
+function menuOptions(token: ReturnType<typeof findToken>, files: WorkspaceFile[]): MenuOption[] {
+  if (token === null) {
+    return [];
+  }
+  const query = token.query.toLowerCase();
+  if (token.kind === "skill") {
+    return listSkills()
+      .filter((skill) => skill.name.toLowerCase().includes(query) || skill.prompt.toLowerCase().includes(query))
+      .slice(0, 6)
+      .map((skill) => ({
+        key: skill.id,
+        label: `/${skill.name}`,
+        detail: skill.prompt.slice(0, 90),
+        insert: skill.prompt,
+      }));
+  }
+  return files
+    .filter((file) => file.path.toLowerCase().includes(query))
+    .slice(0, 6)
+    .map((file) => ({
+      key: file.path,
+      label: `@${file.path}`,
+      detail: `${file.content.length} characters`,
+      insert: `@${file.path}`,
+    }));
+}
+
 /**
  * The answer stream and the composer. The composer offers `/` for a saved
  * skill and `@` for a workspace file (CX-04), a live token meter (CX-01) and
@@ -69,10 +99,12 @@ export function ChatPanel({
   files,
   contextUsed,
   contextLimit,
+  priceIn,
   approval,
   onDecision,
 }: ChatPanelProps) {
   const [draft, setDraft] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
   const [cursor, setCursor] = useState(0);
   const [menuIndex, setMenuIndex] = useState(0);
   const [dismissed, setDismissed] = useState(false);
@@ -115,32 +147,7 @@ export function ChatPanel({
   }, [draft]);
 
   const token = findToken(draft, cursor);
-  const options = useMemo<MenuOption[]>(() => {
-    if (token === null) {
-      return [];
-    }
-    const query = token.query.toLowerCase();
-    if (token.kind === "skill") {
-      return listSkills()
-        .filter((skill) => skill.name.toLowerCase().includes(query) || skill.prompt.toLowerCase().includes(query))
-        .slice(0, 6)
-        .map((skill) => ({
-          key: skill.id,
-          label: `/${skill.name}`,
-          detail: skill.prompt.slice(0, 90),
-          insert: skill.prompt,
-        }));
-    }
-    return files
-      .filter((file) => file.path.toLowerCase().includes(query))
-      .slice(0, 6)
-      .map((file) => ({
-        key: file.path,
-        label: `@${file.path}`,
-        detail: `${file.content.length} characters`,
-        insert: `@${file.path}`,
-      }));
-  }, [token, files]);
+  const options = menuOptions(token, files);
 
   const menuOpen = token !== null && options.length > 0 && !dismissed;
 
@@ -155,6 +162,21 @@ export function ChatPanel({
     areaRef.current?.focus();
   };
 
+  /** Copy one answer. The button reports the copy for a moment. */
+  const copyAnswer = async (message: UIMessage): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(message.id);
+      window.setTimeout(() => setCopied((value) => (value === message.id ? null : value)), 1400);
+    } catch {
+      setCopied(null);
+    }
+  };
+
+  /** CO-01: a rough input estimate for the prompt before the send. */
+  const draftTokens = Math.ceil(draft.trim().length / 4);
+  const inputEstimate = priceIn === null ? null : ((contextUsed + draftTokens) / 1_000_000) * priceIn;
+
   const submit = (): void => {
     const text = draft.trim();
     if (text.length === 0 || !canSend || streaming) {
@@ -163,6 +185,55 @@ export function ChatPanel({
     onSend(text);
     setDraft("");
     setCursor(0);
+  };
+
+  /** The menu owns the arrow keys and Enter while it is open. */
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (menuOpen) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setMenuIndex((index) => (index + 1) % options.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setMenuIndex((index) => (index - 1 + options.length) % options.length);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setDismissed(true);
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        const option = options[menuIndex];
+        if (option !== undefined) {
+          choose(option);
+        }
+        return;
+      }
+    }
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      submit();
+    }
+  };
+
+  /** ER-04: "Change the prompt" loads the failed prompt back into the box. */
+  const handleErrorAction = (action: string, message: UIMessage): void => {
+    if (action === "change_prompt") {
+      const index = messages.findIndex((item) => item.id === message.id);
+      const previous =
+        index === -1 ? undefined : messages.slice(0, index).reverse().find((item) => item.role === "user");
+      if (previous !== undefined) {
+        const text = previous.display ?? previous.content;
+        setDraft(text);
+        setCursor(text.length);
+        areaRef.current?.focus();
+      }
+    }
+    onErrorAction(action, message);
   };
 
   return (
@@ -251,7 +322,7 @@ export function ChatPanel({
               {message.scene !== undefined ? <SceneView scene={message.scene} /> : null}
 
               {message.error !== undefined ? (
-                <ErrorCard error={message.error} onAction={(action) => onErrorAction(action, message)} />
+                <ErrorCard error={message.error} onAction={(action) => handleErrorAction(action, message)} />
               ) : null}
 
               {message.error === undefined && message.content.length > 0 ? (
@@ -274,6 +345,15 @@ export function ChatPanel({
                   message.stopReason === "limit" ? (
                     <span className="ws-meta-warn">{message.stopReason}</span>
                   ) : null}
+                  <button
+                    type="button"
+                    className="ws-copy"
+                    aria-label="Copy this answer"
+                    onClick={() => void copyAnswer(message)}
+                  >
+                    <Icon name={copied === message.id ? "check" : "copy"} size={11} />
+                    {copied === message.id ? "Copied" : "Copy"}
+                  </button>
                 </footer>
               ) : null}
             </motion.article>
@@ -328,37 +408,7 @@ export function ChatPanel({
             }}
             onClick={(event) => setCursor(event.currentTarget.selectionStart ?? 0)}
             onKeyUp={(event) => setCursor(event.currentTarget.selectionStart ?? 0)}
-            onKeyDown={(event) => {
-              if (menuOpen) {
-                if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  setMenuIndex((index) => (index + 1) % options.length);
-                  return;
-                }
-                if (event.key === "ArrowUp") {
-                  event.preventDefault();
-                  setMenuIndex((index) => (index - 1 + options.length) % options.length);
-                  return;
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setDismissed(true);
-                  return;
-                }
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  const option = options[menuIndex];
-                  if (option !== undefined) {
-                    choose(option);
-                  }
-                  return;
-                }
-              }
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                submit();
-              }
-            }}
+            onKeyDown={handleKeyDown}
           />
           <div className="ws-input-foot">
             <span className="ws-meter mono">
@@ -366,6 +416,11 @@ export function ChatPanel({
                 ? `${tokenCount(contextUsed)} tokens`
                 : `${tokenCount(contextUsed)} / ${tokenCount(contextLimit)}`}
             </span>
+            {inputEstimate === null ? null : (
+              <span className="ws-estimate mono" title="The estimated input cost of this prompt">
+                {formatUsd(inputEstimate, true)} in est.
+              </span>
+            )}
             <div className="ws-input-actions">
               <span className="ws-hint">Enter to send · Shift+Enter for a line</span>
               {streaming ? (

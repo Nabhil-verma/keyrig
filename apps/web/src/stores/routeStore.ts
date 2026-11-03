@@ -8,7 +8,7 @@ import { createDocument, isVersionedDocument, type StorageLike } from "@keyrig/s
  * browser. It holds no key material, only the id of a key in the vault.
  */
 export const ROUTE_STORAGE_KEY = "keyrig.route.v1";
-export const ROUTE_SCHEMA_VERSION = 1;
+const ROUTE_SCHEMA_VERSION = 1;
 
 export interface SavedRoute {
   providerId: string;

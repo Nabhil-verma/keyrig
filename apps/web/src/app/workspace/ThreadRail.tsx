@@ -1,7 +1,7 @@
 import { ROLE_LABELS, budgetState, can, type RoleId } from "@keyrig/core";
 import { formatUsd } from "@keyrig/providers";
 import type { ShelfTab } from "../../components/Shelf";
-import { threadPreview, type StoredThread } from "../../stores/threads";
+import { MAX_THREADS, threadPreview, type StoredThread } from "../../stores/threads";
 import { Icon } from "../../components/ui/Icon";
 import { Link } from "../router";
 
@@ -17,8 +17,32 @@ interface ThreadRailProps {
   onDeleteThread: (id: string) => void;
   budget: ReturnType<typeof budgetState>;
   budgetStop: boolean;
+  atCap: boolean;
   onContinue: () => void;
   onOpenShelf: (tab: ShelfTab) => void;
+}
+
+/** The cost of the thread. An answer with no price is unknown, not free (PR-03). */
+function costLabel(thread: StoredThread): string | null {
+  let known = 0;
+  let unknown = false;
+  for (const message of thread.messages) {
+    if (message.costUsd === undefined) {
+      continue;
+    }
+    if (message.pricingKnown === false) {
+      unknown = true;
+    } else {
+      known += message.costUsd;
+    }
+  }
+  if (unknown && known === 0) {
+    return "cost unknown";
+  }
+  if (known === 0) {
+    return null;
+  }
+  return unknown ? `${formatUsd(known, true)} + unknown` : formatUsd(known, true);
 }
 
 /** The left rail: the saved chats, the budget meter and the setup links. */
@@ -34,6 +58,7 @@ export function ThreadRail({
   onDeleteThread,
   budget,
   budgetStop,
+  atCap,
   onContinue,
   onOpenShelf,
 }: ThreadRailProps) {
@@ -65,8 +90,8 @@ export function ThreadRail({
             >
               <span className="ws-thread-title">{thread.title}</span>
               <span className="ws-thread-preview">{threadPreview(thread) || "No message yet"}</span>
-              <span className="ws-thread-meta">
-                {thread.messages.length} {thread.messages.length === 1 ? "message" : "messages"}
+              <span className="ws-thread-meta">                  {thread.messages.length} {thread.messages.length === 1 ? "message" : "messages"}
+                  {costLabel(thread) === null ? "" : ` · ${costLabel(thread)}`}
               </span>
             </button>
             <button
@@ -100,6 +125,12 @@ export function ThreadRail({
         ) : null}
       </div>
 
+      {atCap ? (
+        <p className="ws-rail-note">
+          This device keeps {MAX_THREADS} chats. A new chat removes the oldest one.
+        </p>
+      ) : null}
+
       <footer className="ws-rail-foot">
         <span className="ws-status">
           <span className="ws-dot" />
@@ -125,4 +156,3 @@ export function ThreadRail({
     </aside>
   );
 }
-

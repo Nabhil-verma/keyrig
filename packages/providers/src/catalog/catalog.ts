@@ -1,4 +1,4 @@
-import { createDocument, isVersionedDocument, type StorageLike, type VersionedDocument } from "@keyrig/shared";
+import { bindFetch, createDocument, isVersionedDocument, type StorageLike, type VersionedDocument } from "@keyrig/shared";
 import bundled from "./bundled-catalog.json";
 import type { Pricing, PriceTier } from "./cost";
 
@@ -223,7 +223,7 @@ export async function loadCatalog(options: LoadCatalogOptions = {}): Promise<Loa
     }
   }
 
-  const doFetch = options.fetchImpl ?? (typeof fetch === "function" ? fetch : undefined);
+  const doFetch = options.fetchImpl ?? (typeof fetch === "function" ? bindFetch() : undefined);
   if (doFetch) {
     try {
       const signal =

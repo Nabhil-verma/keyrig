@@ -91,6 +91,21 @@ export interface StreamHandlers {
   onUsage?: (usage: Usage) => void;
 }
 
+/** What an adapter collects while it reads one stream (PV-08). */
+export interface StreamState {
+  text: string;
+  reasoning: string;
+  usage: Usage;
+  finishReason: string | null;
+  requestId?: string;
+  /** AS-01: the calls that the model asked for. */
+  toolCalls: ToolCall[];
+  /** True after the provider sent its end event. */
+  sawEnd: boolean;
+  /** True when the stream broke, stopped, or held a value that keyrig cannot read. */
+  part: boolean;
+}
+
 export interface ProviderCallConfig {
   /** The key for one request. The adapter does not store the key. */
   apiKey?: string;
@@ -102,6 +117,3 @@ export interface ProviderCallConfig {
   timeoutMs?: number;
 }
 
-export interface ChatClock {
-  now: () => number;
-}

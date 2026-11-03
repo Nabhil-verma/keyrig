@@ -55,6 +55,18 @@ describe("the saved chats", () => {
     expect(next[0]?.messages[0]?.content).toBe("two");
   });
 
+  it("cuts the messages at the write, not only at the read", () => {
+    const storage = createMemoryStorage();
+    const many = Array.from({ length: MAX_THREADS_MESSAGES + 5 }, (_, index) =>
+      message(`m${index}`, "user", `line ${index}`),
+    );
+    writeThreads(storage, [thread("a", "2026-11-01T00:00:00.000Z", many)]);
+
+    const stored = JSON.parse(storage.getItem("keyrig.threads.v1") ?? "{}");
+    expect(stored.data[0].messages).toHaveLength(MAX_THREADS_MESSAGES);
+    expect(stored.data[0].messages[0].content).toBe("line 5");
+  });
+
   it("removes a thread", () => {
     expect(removeThread([thread("a", "2026-11-01T00:00:00.000Z")], "a")).toEqual([]);
   });

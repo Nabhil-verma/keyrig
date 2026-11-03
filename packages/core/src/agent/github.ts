@@ -1,4 +1,4 @@
-import { KeyrigError } from "@keyrig/shared";
+import { bindFetch, KeyrigError } from "@keyrig/shared";
 import { MAX_COMMIT_CHARS, MAX_COMMIT_FILES, normalizeWorkspacePath, protectedReason } from "./tools";
 import { GITHUB_API_URL } from "../identity/identity";
 
@@ -162,9 +162,12 @@ interface CallOptions {
 }
 
 async function call<T>(options: CallOptions): Promise<T> {
+  // Call it as a local, never as `options.fetchImpl`, or a browser rejects the
+  // receiver of the global fetch.
+  const fetchImpl = options.fetchImpl;
   let response: Response;
   try {
-    response = await options.fetchImpl(options.url, {
+    response = await fetchImpl(options.url, {
       method: options.method ?? "GET",
       headers: options.headers,
       ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
@@ -207,7 +210,7 @@ export async function commitFiles(options: CommitOptions): Promise<CommitOutcome
     invalid("Type a commit message.");
   }
 
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = bindFetch(options.fetchImpl);
   const headers = {
     accept: "application/vnd.github+json",
     "content-type": "application/json",

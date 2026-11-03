@@ -1,7 +1,7 @@
 import { providerStreamError } from "../wire/classify";
 import { isAbortError, readNdjson } from "../wire/sse";
-import type { StreamHandlers } from "../wire/types";
-import type { ParsedStream } from "./openai";
+import type { StreamHandlers, StreamState } from "../wire/types";
+import { emptyStreamState } from "./openai";
 
 interface OllamaLine {
   message?: { content?: string; thinking?: string };
@@ -15,16 +15,8 @@ interface OllamaLine {
 export async function readOllamaStream(
   body: ReadableStream<Uint8Array>,
   handlers: StreamHandlers,
-): Promise<ParsedStream> {
-  const state: ParsedStream = {
-    text: "",
-    reasoning: "",
-    usage: { inputTokens: 0, outputTokens: 0 },
-    finishReason: null,
-    toolCalls: [],
-    sawEnd: false,
-    part: false,
-  };
+): Promise<StreamState> {
+  const state = emptyStreamState();
 
   try {
     await readNdjson<OllamaLine>(body, (line) => {

@@ -28,6 +28,8 @@ export type IconName =
   | "eyeOff"
   | "globe"
   | "download"
+  | "copy"
+  | "share"
   | "search"
   | "file"
   | "settings";
@@ -144,6 +146,20 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   download: <path d="M12 4v11M7.5 11.5 12 16l4.5-4.5M5 19.5h14" />,
+  copy: (
+    <>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M15 6.5V5.5a2 2 0 0 0-2-2H5.5a2 2 0 0 0-2 2V13a2 2 0 0 0 2 2H6.5" />
+    </>
+  ),
+  share: (
+    <>
+      <circle cx="6" cy="12" r="2.5" />
+      <circle cx="18" cy="6" r="2.5" />
+      <circle cx="18" cy="18" r="2.5" />
+      <path d="M8.2 10.8 15.8 7.2M8.2 13.2l7.6 3.6" />
+    </>
+  ),
   search: (
     <>
       <circle cx="11" cy="11" r="6.5" />

@@ -38,7 +38,7 @@ declare global {
 
 let scriptPromise: Promise<void> | null = null;
 
-export function loadGoogleScript(): Promise<void> {
+function loadGoogleScript(): Promise<void> {
   if (window.google?.accounts?.id !== undefined) {
     return Promise.resolve();
   }

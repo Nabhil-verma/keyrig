@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AccountRecord, AgentApprovalRequest, KeyView, RoleAssignment, RoleId, SignedInAccount } from "@keyrig/core";
+import type { AccountRecord, AgentApprovalRequest, KeyView, RoleAssignment, RoleId, SignedInAccount, UsageEvent } from "@keyrig/core";
 import {
   accountStorage,
   assignRole,
@@ -41,10 +41,14 @@ import { WorkspaceHeader } from "./workspace/WorkspaceHeader";
 import { readConnections, type AccountConnections } from "../stores/connections";
 import { readRoute, writeRoute } from "../stores/routeStore";
 import { useSettings, writeSettings } from "../stores/settings";
-import { addSpend, readSpend, utcDay } from "../stores/spendStore";
+import { addSpend, readSpend, readSpendHistory, utcDay } from "../stores/spendStore";
 import { browserStorage } from "../lib/storage";
 import {
+  atMessageCap,
+  atThreadCap,
   createThread,
+  MAX_THREADS,
+  MAX_THREADS_MESSAGES,
   readThreads,
   removeThread as removeThreadFromList,
   threadPreview,
@@ -54,13 +58,26 @@ import {
   type StoredThread,
 } from "../stores/threads";
 import { activeTools, useAgentSettings } from "../stores/toolSettings";
-import { newId, type ArenaResult, type UIMessage } from "../lib/types";
+import { newId, type ArenaResult, type ArenaRun, type UIMessage } from "../lib/types";
+import { downloadText, fileSafeName, threadToMarkdown } from "../lib/threadExport";
+import { threadReceiptSvg } from "../lib/receipt";
 import { Icon } from "../components/ui/Icon";
 import { Workspace, type WorkspaceFile } from "../stores/workspace";
 import { safeError } from "./workspace/chatTurnHelpers";
 import { useChatTurns } from "./workspace/useChatTurns";
 
 const storage = browserStorage();
+
+/** The last message that matches, so the chat shows its newest facts. */
+function lastWhere<T>(items: readonly T[], test: (item: T) => boolean): T | undefined {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item !== undefined && test(item)) {
+      return item;
+    }
+  }
+  return undefined;
+}
 
 export default function App() {
   const settings = useSettings();
@@ -85,6 +102,12 @@ export default function App() {
   const [totalCost, setTotalCost] = useState(0);
   /** CO-02: the spend for the UTC day, kept on this device. */
   const [spentToday, setSpentToday] = useState(0);
+  /** CO-02: the last days, for the inspector. */
+  const [spendDays, setSpendDays] = useState(() => readSpendHistory(storage));
+  /** CO-04: the last requests of this session. */
+  const [usage, setUsage] = useState<UsageEvent[]>([]);
+  /** UX-01: the arena run of the open chat. A reload keeps it. */
+  const [arenaRun, setArenaRun] = useState<ArenaRun | null>(null);
   /** A user choice to pass the daily limit for this session only. */
   const [overBudget, setOverBudget] = useState(false);
   const [role, setRole] = useState<RoleId | null>(null);
@@ -120,6 +143,14 @@ export default function App() {
     setFiles(workspace === null ? [] : workspace.files());
   }, [workspace]);
 
+  /** Move the route to another manifest and clear the facts of the old provider. */
+  const applyManifest = useCallback((next: ProviderManifest | undefined): void => {
+    setModelId(next?.defaultModel ?? "");
+    setBaseUrl(next?.supportsCustomBaseUrl ? next.baseUrl : "");
+    setProviderModels([]);
+    setModelsError(null);
+  }, []);
+
   useEffect(() => {
     threadsRef.current = threads;
   }, [threads]);
@@ -136,9 +167,12 @@ export default function App() {
     });
     // CO-02: the day opens from the stored total, so a reload keeps the budget.
     setSpentToday(readSpend(storage, utcDay()));
+    setSpendDays(readSpendHistory(storage));
     const unsubscribe = bus.subscribe((event) => {
       setTotalCost((value) => value + event.costUsd);
       setSpentToday(addSpend(storage, event.costUsd));
+      setSpendDays(readSpendHistory(storage));
+      setUsage((current) => [...current, event].slice(-20));
     });
     return () => {
       active = false;
@@ -179,28 +213,25 @@ export default function App() {
     }
     return threads.filter(
       (thread) =>
-        thread.title.toLowerCase().includes(needle) || threadPreview(thread).toLowerCase().includes(needle),
+        thread.title.toLowerCase().includes(needle) ||
+        threadPreview(thread).toLowerCase().includes(needle) ||
+        thread.messages.some((message) =>
+          (message.display ?? message.content).toLowerCase().includes(needle),
+        ),
     );
   }, [threads, search]);
 
-  const lastTools = useMemo(() => {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      if (message !== undefined && message.role === "assistant" && message.tools !== undefined) {
-        return message.tools;
-      }
-    }
-    return [];
-  }, [messages]);
+  const lastTools = useMemo(
+    () => lastWhere(messages, (message) => message.role === "assistant" && message.tools !== undefined)?.tools ?? [],
+    [messages],
+  );
 
   const contextUsed = useMemo(() => {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      if (message !== undefined && message.role === "assistant" && message.inputTokens !== undefined) {
-        return message.inputTokens + (message.outputTokens ?? 0);
-      }
-    }
-    return 0;
+    const message = lastWhere(
+      messages,
+      (item) => item.role === "assistant" && item.inputTokens !== undefined,
+    );
+    return (message?.inputTokens ?? 0) + (message?.outputTokens ?? 0);
   }, [messages]);
 
   useEffect(() => {
@@ -220,11 +251,8 @@ export default function App() {
       return;
     }
     setProviderId(first.id);
-    setModelId(first.defaultModel ?? "");
-    setBaseUrl(first.supportsCustomBaseUrl ? first.baseUrl : "");
-    setProviderModels([]);
-    setModelsError(null);
-  }, [enabledManifests, providerId]);
+    applyManifest(first);
+  }, [enabledManifests, providerId, applyManifest]);
 
   const baseUrlCheck =
     manifest.supportsCustomBaseUrl && baseUrl.trim().length > 0 ? checkBaseUrl(baseUrl.trim()) : null;
@@ -237,13 +265,9 @@ export default function App() {
    * keeps the typed model name.
    */
   useEffect(() => {
-    if (session === null || !can(role, "route.manage") || !manifest.abilities.modelList) {
-      setProviderModels([]);
-      setModelsBusy(false);
-      setModelsError(null);
-      return;
-    }
-    if (manifest.authType === "api-key" && providerKeys.length === 0) {
+    const canList = session !== null && can(role, "route.manage") && manifest.abilities.modelList;
+    const hasKey = manifest.authType !== "api-key" || providerKeys.length > 0;
+    if (!canList || !hasKey) {
       setProviderModels([]);
       setModelsBusy(false);
       setModelsError(null);
@@ -314,12 +338,13 @@ export default function App() {
         createdAt: current?.createdAt ?? now,
         updatedAt: now,
         messages,
+        ...(arenaRun !== null ? { arena: arenaRun } : {}),
       });
       writeThreads(accountStorage(storage, session.username), next);
       setThreads(next);
     }, 400);
     return () => clearTimeout(timer);
-  }, [messages, activeId, session]);
+  }, [messages, activeId, session, arenaRun]);
 
   /** Keep the route for this account. The write is best effort. */
   useEffect(() => {
@@ -329,19 +354,27 @@ export default function App() {
     writeRoute(storage, session.username, { providerId, modelId, keyId, baseUrl });
   }, [session, providerId, modelId, keyId, baseUrl, settings.rememberRoute]);
 
-  const blockReason = !session
-    ? "Sign in to start."
-    : !can(role, "chat.send")
-      ? "Your role cannot send prompts. Ask an owner to change your role."
-      : budgetStop
-        ? (budgetMessage(budget) ?? "The daily budget is spent.")
-        : needsKey && providerKeys.length === 0
-          ? `Add a key for ${manifest.displayName}.`
-          : modelId.trim().length === 0
-            ? "Choose a model."
-            : customBaseBlocked
-              ? (baseUrlCheck?.warning ?? "The base URL is not allowed.")
-              : (baseUrlCheck?.warning ?? null);
+  const blockReason = ((): string | null => {
+    if (session === null) {
+      return "Sign in to start.";
+    }
+    if (!can(role, "chat.send")) {
+      return "Your role cannot send prompts. Ask an owner to change your role.";
+    }
+    if (budgetStop) {
+      return budgetMessage(budget) ?? "The daily budget is spent.";
+    }
+    if (needsKey && providerKeys.length === 0) {
+      return `Add a key for ${manifest.displayName}.`;
+    }
+    if (modelId.trim().length === 0) {
+      return "Choose a model.";
+    }
+    if (customBaseBlocked) {
+      return baseUrlCheck?.warning ?? "The base URL is not allowed.";
+    }
+    return baseUrlCheck?.warning ?? null;
+  })();
 
   const canSend =
     session !== null &&
@@ -356,6 +389,8 @@ export default function App() {
     session,
     needsKey,
     selectedKey,
+    keys: providerKeys,
+    onKeyChange: setKeyId,
     manifest,
     modelId,
     providerId,
@@ -381,6 +416,12 @@ export default function App() {
     onOpenRoute: () => setRouteOpen(true),
   });
 
+  const runArenaTurn = async (prompt: string, chosen: string[]): Promise<ArenaResult[]> => {
+    const results = await runArena(prompt, chosen);
+    setArenaRun({ prompt, at: new Date().toISOString(), results });
+    return results;
+  };
+
   const pickArenaAnswer = (prompt: string, result: ArenaResult): void => {
     const at = new Date().toISOString();
     setMessages([
@@ -405,12 +446,8 @@ export default function App() {
   };
 
   const changeProvider = (next: string): void => {
-    const nextManifest = getManifest(enabledManifests, next);
     setProviderId(next);
-    setModelId(nextManifest?.defaultModel ?? "");
-    setBaseUrl(nextManifest?.supportsCustomBaseUrl ? nextManifest.baseUrl : "");
-    setProviderModels([]);
-    setModelsError(null);
+    applyManifest(getManifest(enabledManifests, next));
   };
 
   /** PV-11: read the model list again with the selected key. */
@@ -433,6 +470,7 @@ export default function App() {
     setApproval(null);
     setActiveId(thread.id);
     setMessages(thread.messages);
+    setArenaRun(thread.arena ?? null);
     setView("chat");
   };
 
@@ -444,10 +482,19 @@ export default function App() {
       setView("chat");
       return;
     }
+    if (
+      atThreadCap(threadsRef.current) &&
+      !window.confirm(
+        `This device keeps ${MAX_THREADS} chats. A new chat removes the oldest one. Continue?`,
+      )
+    ) {
+      return;
+    }
     const thread = createThread();
     persistThreads(upsertThread(threadsRef.current, thread));
     setActiveId(thread.id);
     setMessages([]);
+    setArenaRun(null);
     setView("chat");
   };
 
@@ -497,6 +544,7 @@ export default function App() {
     threadsRef.current = threadList;
     setActiveId(firstThread.id);
     setMessages(firstThread.messages);
+    setArenaRun(firstThread.arena ?? null);
     setTotalCost(0);
     setOverBudget(false);
     setSpentToday(readSpend(storage, utcDay()));
@@ -561,8 +609,10 @@ export default function App() {
     setConnections(null);
     setApproval(null);
     setFiles([]);
-    setShelf({ open: false, tab: "keys" });
     setRouteOpen(false);
+    setArenaRun(null);
+    setUsage([]);
+    setSpendDays(readSpendHistory(storage));
   };
 
   /** AC-04: only an account with the roles.assign key changes a role. */
@@ -578,6 +628,49 @@ export default function App() {
     }
   };
 
+  /**
+   * The open chat with its live messages. The saved record waits 400 ms, so an
+   * export must read the screen instead of the record.
+   */
+  const threadForExport = (): StoredThread | null => {
+    if (messages.length === 0) {
+      return null;
+    }
+    const stored = threadsRef.current.find((item) => item.id === activeId);
+    const firstUser = messages.find((message) => message.role === "user");
+    const title =
+      stored !== undefined && stored.title !== "New chat"
+        ? stored.title
+        : firstUser !== undefined
+          ? titleFrom(firstUser.display ?? firstUser.content)
+          : "New chat";
+    return {
+      id: activeId,
+      title,
+      createdAt: stored?.createdAt ?? new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      messages,
+    };
+  };
+
+  /** Item 7: one chat leaves as a file. The file holds no key secret. */
+  const exportThread = (): void => {
+    const thread = threadForExport();
+    if (thread === null) {
+      return;
+    }
+    downloadText(`${fileSafeName(thread.title)}.md`, threadToMarkdown(thread));
+  };
+
+  /** Item 15: the facts of the chat as one shareable card. */
+  const shareReceipt = (): void => {
+    const thread = threadForExport();
+    if (thread === null) {
+      return;
+    }
+    downloadText(`${fileSafeName(thread.title)}-receipt.svg`, threadReceiptSvg(thread), "image/svg+xml");
+  };
+
   if (session === null) {
     return <SignedOutStage onSignUp={handleSignUp} onSignIn={handleSignIn} onImport={handleImport} />;
   }
@@ -590,6 +683,9 @@ export default function App() {
         onView={setView}
         totalCost={totalCost}
         theme={theme}
+        canExport={messages.length > 0}
+        onExport={exportThread}
+        onShareReceipt={shareReceipt}
         onToggleTheme={() => writeSettings({ theme: theme === "dark" ? "light" : "dark" })}
         onSignOut={signOut}
       />
@@ -607,6 +703,7 @@ export default function App() {
           onDeleteThread={deleteThread}
           budget={budget}
           budgetStop={budgetStop}
+          atCap={atThreadCap(threads)}
           onContinue={() => setOverBudget(true)}
           onOpenShelf={(tab) => setShelf({ open: true, tab })}
         />
@@ -669,6 +766,14 @@ export default function App() {
             </div>
           ) : null}
 
+          {view === "chat" && atMessageCap(messages) ? (
+            <div className="ws-warn" role="status">
+              <Icon name="alert" size={12} />
+              This chat holds {MAX_THREADS_MESSAGES} messages. Only the newest {MAX_THREADS_MESSAGES} are saved.
+              Export the chat to keep the full record.
+            </div>
+          ) : null}
+
           {view === "chat" ? (
             <ChatPanel
               messages={messages}
@@ -681,6 +786,7 @@ export default function App() {
               files={files}
               contextUsed={contextUsed}
               contextLimit={catalogModel?.contextLimit ?? null}
+              priceIn={pricing?.input ?? null}
               approval={approval}
               onDecision={decideApproval}
             />
@@ -693,8 +799,9 @@ export default function App() {
                   ? "Your role cannot run the arena. Ask an owner to change your role."
                   : blockReason
               }
-              onRun={runArena}
+              onRun={runArenaTurn}
               onPick={pickArenaAnswer}
+              saved={arenaRun}
             />
           )}
         </main>
@@ -720,6 +827,8 @@ export default function App() {
             refreshFiles();
           }}
           tools={lastTools}
+          requests={usage}
+          days={spendDays}
         />
       </div>
 

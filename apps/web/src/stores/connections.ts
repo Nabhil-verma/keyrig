@@ -9,8 +9,8 @@ import { createDocument, isVersionedDocument, type StorageLike } from "@keyrig/s
  * only labels and the switch that allows the AI to commit.
  */
 
-export const CONNECTIONS_STORAGE_KEY = "keyrig.connections.v1";
-export const CONNECTIONS_SCHEMA_VERSION = 1;
+const CONNECTIONS_STORAGE_KEY = "keyrig.connections.v1";
+const CONNECTIONS_SCHEMA_VERSION = 1;
 
 export interface AccountConnections {
   recoveryEmail: string | null;
@@ -22,7 +22,7 @@ export interface AccountConnections {
   commitPermit: boolean;
 }
 
-export const DEFAULT_CONNECTIONS: AccountConnections = {
+const DEFAULT_CONNECTIONS: AccountConnections = {
   recoveryEmail: null,
   githubLogin: null,
   githubRepo: "",

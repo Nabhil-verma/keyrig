@@ -1,11 +1,13 @@
+import type { UsageEvent } from "@keyrig/core";
 import { formatUsd } from "@keyrig/providers";
+import type { SpendDay } from "../stores/spendStore";
 
 /**
  * PR-02, PR-03 and KS-03: the right-hand inspector states what leaves the
- * device. It holds no key, no header and no prompt text. It shows the spend
- * against the daily budget, so the number stays in view.
+ * device. It holds no key, no header and no prompt text. It shows the spend of
+ * the day, the last days and the last requests of the session.
  */
-export interface OutboundPanelProps {
+interface OutboundPanelProps {
   provider: string;
   wireFormat: string;
   endpoint: string;
@@ -18,6 +20,15 @@ export interface OutboundPanelProps {
   priceOut: number | null;
   spent: number;
   limit: number | null;
+  days: SpendDay[];
+  requests: UsageEvent[];
+}
+
+function dayHeight(usd: number, max: number): number {
+  if (max <= 0 || usd <= 0) {
+    return 3;
+  }
+  return 4 + Math.round((usd / max) * 24);
 }
 
 export function OutboundPanel({
@@ -33,8 +44,12 @@ export function OutboundPanel({
   priceOut,
   spent,
   limit,
+  days,
+  requests,
 }: OutboundPanelProps) {
   const ratio = limit === null || limit <= 0 ? 0 : Math.min(100, Math.round((spent / limit) * 100));
+  const maxDay = days.reduce((max, entry) => Math.max(max, entry.usd), 0);
+  const recent = [...requests].reverse().slice(0, 6);
 
   return (
     <div className="ws-outbound">
@@ -87,13 +102,49 @@ export function OutboundPanel({
           </strong>
         </div>
         {limit === null ? null : (
-          <div className="ws-budget-bar" role="progressbar" aria-valuenow={ratio} aria-valuemin={0} aria-valuemax={100}>
+          <div
+            className="ws-budget-bar"
+            role="progressbar"
+            aria-valuenow={ratio}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
             <span style={{ width: `${ratio}%` }} />
           </div>
         )}
+        <div className="ws-days" aria-label="The spend of the last seven days">
+          {days.map((entry) => (
+            <span key={entry.day} className="ws-day" title={`${entry.day}: ${formatUsd(entry.usd)}`}>
+              <span className="ws-day-bar" style={{ height: `${dayHeight(entry.usd, maxDay)}px` }} />
+              <span className="ws-day-label">{entry.day.slice(5)}</span>
+            </span>
+          ))}
+        </div>
       </div>
 
-      <p className="hint">No key, request header or prompt text is shown here. The guard prompt goes with every request.</p>
+      <h3 className="ws-facts-title">Recent requests</h3>
+      {recent.length === 0 ? (
+        <p className="hint">No request in this session yet.</p>
+      ) : (
+        <ul className="ws-requests">
+          {recent.map((event) => (
+            <li key={event.id} className="ws-request">
+              <span className="ws-request-model mono">{event.model}</span>
+              <span className="ws-request-meta">
+                {event.inputTokens.toLocaleString()} in / {event.outputTokens.toLocaleString()} out
+              </span>
+              <span className="ws-request-meta">{formatUsd(event.costUsd, event.pricingKnown)}</span>
+              <span className="ws-request-key">
+                {event.keyLabel} · {event.stopReason}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="hint">
+        No key, request header or prompt text is shown here. The guard prompt goes with every request.
+      </p>
     </div>
   );
 }

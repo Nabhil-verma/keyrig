@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
-import { createMemoryStorage, type StorageLike } from "@keyrig/shared";
 import { THEME_KEY, type Theme } from "../lib/theme";
+import { browserStorage } from "../lib/storage";
 
 /**
  * The settings of this device. They are not per account: the theme, the
@@ -9,11 +9,11 @@ import { THEME_KEY, type Theme } from "../lib/theme";
  * The accent replaces the brand amber. The kit rule says amber is the key and
  * cyan is the AI link, so the app warns before it replaces amber.
  */
-export type ThemeChoice = "dark" | "light" | "system";
-export type MotionChoice = "full" | "reduced";
-export type DensityChoice = "comfortable" | "compact";
+type ThemeChoice = "dark" | "light" | "system";
+type MotionChoice = "full" | "reduced";
+type DensityChoice = "comfortable" | "compact";
 
-export interface AppSettings {
+interface AppSettings {
   theme: ThemeChoice;
   motion: MotionChoice;
   density: DensityChoice;
@@ -26,8 +26,8 @@ export interface AppSettings {
   disabledProviders: string[];
 }
 
-export const SETTINGS_STORAGE_KEY = "keyrig.settings.v1";
-export const SETTINGS_SCHEMA_VERSION = 1;
+const SETTINGS_STORAGE_KEY = "keyrig.settings.v1";
+const SETTINGS_SCHEMA_VERSION = 1;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: "dark",
@@ -43,18 +43,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 const ACCENT_PATTERN = /^#[0-9a-f]{6}$/i;
 const MAX_DISABLED = 50;
 
-function deviceStorage(): StorageLike {
-  try {
-    const probe = "keyrig.settings.probe";
-    window.localStorage.setItem(probe, "1");
-    window.localStorage.removeItem(probe);
-    return window.localStorage;
-  } catch {
-    return createMemoryStorage();
-  }
-}
-
-const storage = deviceStorage();
+const storage = browserStorage();
 const listeners = new Set<() => void>();
 let snapshot: AppSettings | null = null;
 let mediaBound = false;

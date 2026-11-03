@@ -932,3 +932,122 @@
     display: none;
   }
 }
+
+/* The copy button, the estimate, the spend record and the receipt. */
+.ws-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.ws-copy:hover {
+  color: var(--text);
+}
+
+.ws-estimate {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.ws-rail-note {
+  margin: 0;
+  padding: 2px 2px 0;
+  color: var(--amber-text);
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.icon-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.ws-facts-title {
+  margin: 14px 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ws-days {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 40px;
+  padding-top: 4px;
+}
+
+.ws-day {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 3px;
+  height: 100%;
+}
+
+.ws-day-bar {
+  width: 100%;
+  min-height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--amber);
+  opacity: 0.72;
+}
+
+.ws-day-label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 8px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-requests {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-request {
+  display: grid;
+  gap: 1px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.ws-request-model {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-request-meta {
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-request-key {
+  font-size: 9.5px;
+}
+
+.scene-save {
+  margin-left: auto;
+}

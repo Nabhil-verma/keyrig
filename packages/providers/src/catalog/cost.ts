@@ -30,21 +30,16 @@ const MILLION = 1_000_000;
 
 export function selectPrice(pricing: Pricing, inputTokens: number): Omit<PriceTier, "minInputTokens"> {
   const tiers = [...(pricing.tiers ?? [])].sort((a, b) => a.minInputTokens - b.minInputTokens);
-  let chosen: Omit<PriceTier, "minInputTokens"> = {
-    input: pricing.input,
-    output: pricing.output,
-    ...(pricing.cacheRead !== undefined ? { cacheRead: pricing.cacheRead } : {}),
-  };
-  for (const tier of tiers) {
-    if (inputTokens > tier.minInputTokens) {
-      chosen = {
-        input: tier.input,
-        output: tier.output,
-        ...(tier.cacheRead !== undefined ? { cacheRead: tier.cacheRead } : {}),
-      };
+  let tier: PriceTier | undefined;
+  for (const candidate of tiers) {
+    if (inputTokens > candidate.minInputTokens) {
+      tier = candidate;
     }
   }
-  return chosen;
+  const input = tier?.input ?? pricing.input;
+  const output = tier?.output ?? pricing.output;
+  const cacheRead = tier ? tier.cacheRead : pricing.cacheRead;
+  return { input, output, ...(cacheRead !== undefined ? { cacheRead } : {}) };
 }
 
 export function estimateCost(usage: Usage, pricing: Pricing | undefined): CostEstimate {

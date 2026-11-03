@@ -12,8 +12,8 @@ export interface Skill {
   createdAt: string;
 }
 
-export const SKILLS_STORAGE_KEY = "keyrig.skills.v1";
-export const SKILLS_SCHEMA_VERSION = 1;
+const SKILLS_STORAGE_KEY = "keyrig.skills.v1";
+const SKILLS_SCHEMA_VERSION = 1;
 export const MAX_SKILLS = 100;
 export const SKILL_NAME_LIMIT = 60;
 export const SKILL_PROMPT_LIMIT = 8000;

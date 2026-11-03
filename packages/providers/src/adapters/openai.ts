@@ -1,18 +1,6 @@
 import { providerStreamError } from "../wire/classify";
 import { isAbortError, readSse } from "../wire/sse";
-import type { StreamHandlers, ToolCall, Usage } from "../wire/types";
-
-export interface ParsedStream {
-  text: string;
-  reasoning: string;
-  usage: Usage;
-  finishReason: string | null;
-  requestId?: string;
-  /** AS-01: the calls that the model asked for. */
-  toolCalls: ToolCall[];
-  sawEnd: boolean;
-  part: boolean;
-}
+import type { StreamHandlers, StreamState, ToolCall, Usage } from "../wire/types";
 
 interface OpenAiUsage {
   prompt_tokens?: number;
@@ -54,11 +42,8 @@ export function normalizeOpenAiUsage(usage: OpenAiUsage | null | undefined): Usa
   };
 }
 
-export async function readOpenAiStream(
-  body: ReadableStream<Uint8Array>,
-  handlers: StreamHandlers,
-): Promise<ParsedStream> {
-  const state: ParsedStream = {
+export function emptyStreamState(): StreamState {
+  return {
     text: "",
     reasoning: "",
     usage: { inputTokens: 0, outputTokens: 0 },
@@ -67,8 +52,15 @@ export async function readOpenAiStream(
     sawEnd: false,
     part: false,
   };
+}
 
-  // A provider sends one call in parts. Join the parts by index before the end.
+export async function readOpenAiStream(
+  body: ReadableStream<Uint8Array>,
+  handlers: StreamHandlers,
+): Promise<StreamState> {
+  const state = emptyStreamState();
+
+  // The provider sends one call in parts. Join the parts by index before the end.
   const partial = new Map<number, { id: string; name: string; arguments: string }>();
   const collect = (delta: OpenAiToolCallDelta): void => {
     const index = delta.index ?? 0;
@@ -93,7 +85,7 @@ export async function readOpenAiStream(
         name: call.name,
         arguments: call.arguments.length > 0 ? call.arguments : "{}",
       }))
-      .filter((call) => call.name.length > 0);
+      .filter((call): call is ToolCall => call.name.length > 0);
   };
 
   try {

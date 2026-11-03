@@ -2,7 +2,7 @@ import { formatUsd } from "@keyrig/providers";
 import { BrandLockup } from "../../components/ui/BrandLockup";
 import { Icon } from "../../components/ui/Icon";
 
-export type WorkspaceView = "chat" | "arena";
+type WorkspaceView = "chat" | "arena";
 
 interface WorkspaceHeaderProps {
   username: string;
@@ -11,6 +11,9 @@ interface WorkspaceHeaderProps {
   /** The cost of this session only. */
   totalCost: number;
   theme: "dark" | "light";
+  canExport: boolean;
+  onExport: () => void;
+  onShareReceipt: () => void;
   onToggleTheme: () => void;
   onSignOut: () => void;
 }
@@ -22,6 +25,9 @@ export function WorkspaceHeader({
   onView,
   totalCost,
   theme,
+  canExport,
+  onExport,
+  onShareReceipt,
   onToggleTheme,
   onSignOut,
 }: WorkspaceHeaderProps) {
@@ -62,6 +68,26 @@ export function WorkspaceHeader({
         <span className="chip mono" title="The cost of this session">
           {formatUsd(totalCost)}
         </span>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Export this chat as Markdown"
+          title="Export this chat"
+          disabled={!canExport}
+          onClick={onExport}
+        >
+          <Icon name="download" size={15} />
+        </button>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Download the receipt card"
+          title="Receipt card"
+          disabled={!canExport}
+          onClick={onShareReceipt}
+        >
+          <Icon name="share" size={15} />
+        </button>
         <button
           type="button"
           className="icon-button"

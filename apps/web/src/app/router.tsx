@@ -11,7 +11,7 @@ function readPath(): string {
   return path.length === 0 ? "/" : path;
 }
 
-export function resolveRoute(path: string): Route {
+function resolveRoute(path: string): Route {
   return KNOWN_PATHS.includes(path) ? (path as Route) : "not-found";
 }
 

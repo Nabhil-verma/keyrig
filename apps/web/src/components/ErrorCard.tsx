@@ -7,6 +7,7 @@ const ACTION_LABEL: Record<string, string> = {
   wait: "Wait",
   switch_model: "Change model",
   check_key: "Open keys",
+  use_other_key: "Use another key",
   reduce_context: "Shorten the chat",
   change_prompt: "Change the prompt",
   check_network: "Check the network",
@@ -19,9 +20,13 @@ interface ErrorCardProps {
   onAction: (action: string) => void;
 }
 
+/** A provider that sends no wait hint still holds the button for a moment. */
+const DEFAULT_RATE_LIMIT_WAIT_MS = 4000;
+
 /** ER-05: the rate limit starts a wait with a visible timer. */
 export function ErrorCard({ error, onAction }: ErrorCardProps) {
-  const waitMs = typeof error.details.retryAfterMs === "number" ? error.details.retryAfterMs : undefined;
+  const hinted = typeof error.details.retryAfterMs === "number" ? error.details.retryAfterMs : undefined;
+  const waitMs = hinted ?? (error.category === "rate_limit" ? DEFAULT_RATE_LIMIT_WAIT_MS : undefined);
   const [remaining, setRemaining] = useState(waitMs ? Math.ceil(waitMs / 1000) : 0);
 
   useEffect(() => {

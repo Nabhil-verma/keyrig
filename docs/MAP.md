@@ -77,7 +77,7 @@ The workspace screen keeps each large part of its layout in one file here.
 
 | File | What it does |
 |---|---|
-| `HomePage.tsx` | The landing page: the product, the routing visual and the call to action. |
+| `HomePage.tsx` | The landing page: the hero rig, the routing scene and the call to action. |
 | `ProvidersPage.tsx` | The six built-in providers and their abilities. |
 | `SecurityPage.tsx` | The product rules and the vault rules. |
 | `SettingsPage.tsx` | `/settings`: the page shell and the section list. |
@@ -101,6 +101,7 @@ Each component shows one part of the workspace.
 | `ProfilePanel.tsx` | The profile: provider, model, key, base URL and budget. |
 | `RolesPanel.tsx` | The role list and the role assignment. |
 | `SceneView.tsx` | The three.js renderer for a `KeyrigScene`. It loads on demand. |
+| `KeyRigObject.tsx` | The three.js key rig in the landing hero. It loads on demand. |
 | `Shelf.tsx` | The setup drawer with the keys, the profile and the roles. |
 | `ToolTrace.tsx` | The record of the tool calls under one answer. |
 | `WorkspacePanel.tsx` | The browser workspace: the file list and the editor. |
@@ -153,7 +154,10 @@ These files are pure helpers. They save nothing and they render nothing.
 | `motion.ts` | The shared motion variants and the ease-out curve. |
 | `theme.ts` | Read and apply the theme. |
 | `pendingPrompt.ts` | Hand one prompt from the settings page to the composer. |
+| `threadExport.ts` | One thread as Markdown, and the download helper. |
+| `receipt.ts` | The totals of a thread and its SVG receipt card. |
 | `storage.ts` | Check `localStorage` and fall back to memory storage. |
+| `trimMessages.ts` | Drop the oldest exchanges of a long chat and keep the failed turn (ER-04). |
 | `types.ts` | The `UIMessage` and `ArenaResult` types and `newId`. |
 
 ### styles/
@@ -161,6 +165,7 @@ These files are pure helpers. They save nothing and they render nothing.
 | File | What it does |
 |---|---|
 | `styles.css` | The design tokens, the components and the public page styles. |
+| `home.css` | The landing page layout, the 3D stage and the scroll scene. |
 | `workspace.css` | The styles of the `/app` workspace. |
 
 ## The packages
@@ -173,6 +178,7 @@ package.
 | File | What it does |
 |---|---|
 | `errors.ts` | The error categories, the remediation actions and the error shape (ER-01, ER-02). |
+| `id.ts` | One random id, with a fallback for a browser without `crypto.randomUUID`. |
 | `redact.ts` | The one redaction function for a key (KS-03). |
 | `schema.ts` | The versioned document and the migration step (AR-03). |
 | `storage.ts` | The `StorageLike` type and the memory storage fallback. |
@@ -191,6 +197,7 @@ package.
 | `adapters/openai.ts` | The OpenAI chat adapter. |
 | `adapters/anthropic.ts` | The Anthropic messages adapter. |
 | `adapters/ollama.ts` | The Ollama chat adapter. |
+| `wire/request.ts` | The shared key and URL checks, the timeout and the fetch error path. |
 | `wire/stream.ts` | `runChat`: the request, the stream and the usage record. |
 | `wire/sse.ts` | The server-sent event reader and the abort helper. |
 | `wire/types.ts` | The neutral content parts: text and image. |
@@ -240,4 +247,5 @@ package.
 | `tools/check-layers.mjs` | The layer check (AR-01). |
 | `tools/fake-provider.mjs` | The local provider for a test with no key. Port 8788. |
 | `tools/fake-mcp.mjs` | The local MCP server for a test. Port 8789. |
+| `tools/make-og-card.mjs` | Draw `public/brand/og-card.png` with no dependency. |
 | `docs/` | The architecture, this map, the product rules, the style, the glossary and the test plan. |

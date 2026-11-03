@@ -1,18 +1,26 @@
 import { KeyrigError } from "@keyrig/shared";
 import { readAnthropicStream } from "../adapters/anthropic";
 import { readOllamaStream } from "../adapters/ollama";
-import { readOpenAiStream, type ParsedStream } from "../adapters/openai";
-import { classifyNetworkFailure, classifyThrown, providerHttpError } from "./classify";
-import { checkBaseUrl, type ProviderManifest } from "../manifests/manifest";
+import { readOpenAiStream } from "../adapters/openai";
+import { classifyThrown } from "./classify";
 import { planRequest, type RequestRule } from "../manifests/rules";
-import type { ChatRequest, ChatResult, ProviderCallConfig, StopReason, StreamHandlers } from "./types";
+import type { ProviderManifest } from "../manifests/manifest";
+import { fetchProvider, prepareCall } from "./request";
+import type {
+  ChatRequest,
+  ChatResult,
+  ProviderCallConfig,
+  StopReason,
+  StreamHandlers,
+  StreamState,
+} from "./types";
 
 /**
  * One chat request, end to end (PV-08).
  *
- * - The caller can abort at any time. The adapter keeps the text it already has.
- * - A broken stream is marked "partial". It is not retried here.
- * - The key is used for this request only. It is never stored.
+ * The caller can abort at any time and keeps the text that already arrived.
+ * A broken stream is marked "partial" and is not retried here. The key lives
+ * in this call only.
  */
 
 export interface RunChatOptions {
@@ -24,9 +32,8 @@ export interface RunChatOptions {
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
-const MAX_ERROR_BODY = 8192;
 
-function stopReasonOf(state: ParsedStream, aborted: boolean): StopReason {
+function stopReasonOf(state: StreamState, aborted: boolean): StopReason {
   if (aborted) {
     return "aborted";
   }
@@ -42,37 +49,40 @@ function stopReasonOf(state: ParsedStream, aborted: boolean): StopReason {
   return "complete";
 }
 
+function readStream(
+  manifest: ProviderManifest,
+  body: ReadableStream<Uint8Array>,
+  handlers: StreamHandlers,
+): Promise<StreamState> {
+  switch (manifest.wireFormat) {
+    case "openai-chat":
+      return readOpenAiStream(body, handlers);
+    case "anthropic-messages":
+      return readAnthropicStream(body, handlers);
+    case "ollama-chat":
+      return readOllamaStream(body, handlers);
+    default:
+      throw KeyrigError.fromCategory("invalid_request", {
+        code: "no_adapter_for_wire_format",
+        message: "keyrig has no adapter for this provider.",
+      });
+  }
+}
+
 export async function runChat(options: RunChatOptions): Promise<ChatResult> {
   const { manifest, config, request, handlers = {} } = options;
-  const apiKey = config.apiKey?.trim() ?? "";
-
-  if (manifest.authType === "api-key" && apiKey.length === 0) {
-    throw KeyrigError.fromCategory("auth", {
-      code: "missing_api_key",
-      message: "keyrig has no key for this provider. Add a key and try again.",
-    });
-  }
-
-  const baseUrl = config.baseUrl && config.baseUrl.trim().length > 0 ? config.baseUrl.trim() : manifest.baseUrl;
-  const urlCheck = checkBaseUrl(baseUrl);
-  if (!urlCheck.allowed) {
-    throw KeyrigError.fromCategory("invalid_request", {
-      code: "blocked_base_url",
-      message: urlCheck.warning ?? "keyrig blocked the base URL.",
-      details: { reason: urlCheck.reason },
-    });
-  }
+  const call = prepareCall(manifest, config, DEFAULT_TIMEOUT_MS);
 
   const warnings: string[] = [];
-  if (config.baseUrl !== undefined && urlCheck.warning !== null) {
-    warnings.push(urlCheck.warning);
+  if (config.baseUrl !== undefined && call.urlCheck.warning !== null) {
+    warnings.push(call.urlCheck.warning);
   }
 
   const plan = planRequest(
     {
       manifest,
-      baseUrl,
-      ...(apiKey.length > 0 ? { apiKey } : {}),
+      baseUrl: call.baseUrl,
+      ...(call.apiKey.length > 0 ? { apiKey: call.apiKey } : {}),
       model: request.model,
       intent: {
         kind: "chat",
@@ -87,52 +97,11 @@ export async function runChat(options: RunChatOptions): Promise<ChatResult> {
     options.rules,
   );
 
-  const secrets = apiKey.length > 0 ? [apiKey] : [];
-  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  let timedOut = false;
-  let timeoutSignal: AbortSignal | undefined;
-  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
-    timeoutSignal = AbortSignal.timeout(timeoutMs);
-    timeoutSignal.addEventListener("abort", () => {
-      timedOut = true;
-    }, { once: true });
-  }
-  const signal =
-    config.signal && timeoutSignal
-      ? AbortSignal.any([config.signal, timeoutSignal])
-      : (config.signal ?? timeoutSignal);
-
-  const fetchImpl = config.fetchImpl ?? fetch;
-  let response: Response;
-  try {
-    response = await fetchImpl(plan.url, {
-      method: "POST",
-      headers: { ...plan.headers, ...(config.headers ?? {}) },
-      body: JSON.stringify(plan.body),
-      ...(signal ? { signal } : {}),
-    });
-  } catch (error) {
-    if (config.signal?.aborted === true) {
-      throw KeyrigError.fromCategory("cancelled");
-    }
-    if (timedOut) {
-      throw KeyrigError.fromCategory("timeout", { details: { timeoutMs } });
-    }
-    throw classifyNetworkFailure(error, {
-      ...(manifest.networkHint !== undefined ? { networkHint: manifest.networkHint } : {}),
-      secrets,
-    });
-  }
-
-  if (!response.ok) {
-    let bodyText = "";
-    try {
-      bodyText = (await response.text()).slice(0, MAX_ERROR_BODY);
-    } catch {
-      bodyText = "";
-    }
-    throw providerHttpError(response.status, bodyText, { response, secrets });
-  }
+  const response = await fetchProvider(call, manifest, plan.url, {
+    method: "POST",
+    headers: { ...plan.headers, ...(config.headers ?? {}) },
+    body: JSON.stringify(plan.body),
+  });
 
   if (!response.body) {
     throw KeyrigError.fromCategory("server", {
@@ -141,41 +110,28 @@ export async function runChat(options: RunChatOptions): Promise<ChatResult> {
     });
   }
 
-  let parsed: ParsedStream;
+  let parsed: StreamState;
   try {
-    switch (manifest.wireFormat) {
-      case "openai-chat":
-        parsed = await readOpenAiStream(response.body, handlers);
-        break;
-      case "anthropic-messages":
-        parsed = await readAnthropicStream(response.body, handlers);
-        break;
-      case "ollama-chat":
-        parsed = await readOllamaStream(response.body, handlers);
-        break;
-      default:
-        throw KeyrigError.fromCategory("invalid_request", {
-          code: "no_adapter_for_wire_format",
-          message: "keyrig has no adapter for this provider.",
-        });
-    }
+    parsed = await readStream(manifest, response.body, handlers);
   } catch (error) {
-    if (config.signal?.aborted === true) {
+    if (call.aborted()) {
       throw KeyrigError.fromCategory("cancelled");
     }
-    if (timedOut) {
-      throw KeyrigError.fromCategory("timeout", { details: { timeoutMs } });
+    if (call.timedOut()) {
+      throw KeyrigError.fromCategory("timeout", { details: { timeoutMs: call.timeoutMs } });
     }
-    throw classifyThrown(error, secrets);
+    throw classifyThrown(error, call.secrets);
   }
 
-  if (timedOut && config.signal?.aborted !== true) {
-    throw KeyrigError.fromCategory("timeout", { details: { timeoutMs, partialChars: parsed.text.length } });
+  if (call.timedOut() && !call.aborted()) {
+    throw KeyrigError.fromCategory("timeout", {
+      details: { timeoutMs: call.timeoutMs, partialChars: parsed.text.length },
+    });
   }
 
   handlers.onUsage?.(parsed.usage);
+  const aborted = call.aborted();
 
-  const aborted = config.signal?.aborted === true;
   return {
     text: parsed.text,
     reasoning: parsed.reasoning,

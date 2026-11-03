@@ -1,7 +1,7 @@
 import { providerStreamError } from "../wire/classify";
 import { isAbortError, readSse } from "../wire/sse";
-import type { StreamHandlers } from "../wire/types";
-import type { ParsedStream } from "./openai";
+import type { StreamHandlers, StreamState } from "../wire/types";
+import { emptyStreamState } from "./openai";
 
 /**
  * Anthropic sends typed events. The input token count arrives at the start.
@@ -28,16 +28,8 @@ interface AnthropicEvent {
 export async function readAnthropicStream(
   body: ReadableStream<Uint8Array>,
   handlers: StreamHandlers,
-): Promise<ParsedStream> {
-  const state: ParsedStream = {
-    text: "",
-    reasoning: "",
-    usage: { inputTokens: 0, outputTokens: 0 },
-    finishReason: null,
-    toolCalls: [],
-    sawEnd: false,
-    part: false,
-  };
+): Promise<StreamState> {
+  const state = emptyStreamState();
 
   const addInput = (usage: AnthropicUsage | undefined): void => {
     const input = usage?.input_tokens ?? 0;

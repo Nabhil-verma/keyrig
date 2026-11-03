@@ -1,4 +1,4 @@
-import { KeyrigError, createDocument, isVersionedDocument, type StorageLike } from "@keyrig/shared";
+import { KeyrigError, createDocument, createId, isVersionedDocument, type StorageLike } from "@keyrig/shared";
 
 /**
  * KS-02: in a browser, encrypt every key with WebCrypto and the user passphrase
@@ -81,13 +81,6 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return copy;
 }
 
-function randomId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `key_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
 export class KeyVault {
   readonly #storage: StorageLike;
   readonly #iterations: number;
@@ -105,7 +98,7 @@ export class KeyVault {
     this.#iterations = options.iterations ?? PBKDF2_ITERATIONS;
     this.#now = options.now ?? (() => Date.now());
     this.#crypto = options.crypto ?? crypto;
-    this.#randomId = options.randomId ?? randomId;
+    this.#randomId = options.randomId ?? (() => createId("key_"));
     this.#state = this.#readBlob() ? "locked" : "empty";
   }
 

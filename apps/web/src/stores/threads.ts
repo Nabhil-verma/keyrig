@@ -1,6 +1,6 @@
 import type { AgentEvent, KeyrigScene } from "@keyrig/core";
-import { createDocument, isVersionedDocument, type StorageLike } from "@keyrig/shared";
-import type { UIMessage } from "../lib/types";
+import { createDocument, createId, isVersionedDocument, type StorageLike } from "@keyrig/shared";
+import type { ArenaResult, ArenaRun, UIMessage } from "../lib/types";
 
 /**
  * AR-03 and AR-06: the saved chats of one account.
@@ -10,13 +10,13 @@ import type { UIMessage } from "../lib/types";
  * and it holds no key.
  */
 
-export const THREADS_STORAGE_KEY = "keyrig.threads.v1";
-export const THREADS_SCHEMA_VERSION = 1;
+const THREADS_STORAGE_KEY = "keyrig.threads.v1";
+const THREADS_SCHEMA_VERSION = 1;
 export const MAX_THREADS = 50;
 export const MAX_THREADS_MESSAGES = 200;
 export const MAX_STORED_TOOLS = 12;
-export const TITLE_LIMIT = 64;
-export const NEW_THREAD_TITLE = "New chat";
+const TITLE_LIMIT = 64;
+const NEW_THREAD_TITLE = "New chat";
 
 export interface StoredThread {
   id: string;
@@ -24,6 +24,8 @@ export interface StoredThread {
   createdAt: string;
   updatedAt: string;
   messages: UIMessage[];
+  /** UX-01: the last arena run of this chat. A reload keeps the comparison. */
+  arena?: ArenaRun;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -51,11 +53,8 @@ export function titleFrom(text: string): string {
   return line.length > TITLE_LIMIT ? `${line.slice(0, TITLE_LIMIT - 1).trimEnd()}…` : line;
 }
 
-export function newThreadId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `thread_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+function newThreadId(): string {
+  return createId("thread_");
 }
 
 export function createThread(now: () => number = () => Date.now()): StoredThread {
@@ -92,6 +91,48 @@ function readScene(value: unknown): KeyrigScene | null {
     return null;
   }
   return value as unknown as KeyrigScene;
+}
+
+function readArenaResult(value: unknown): ArenaResult | null {
+  if (!isPlainObject(value)) {
+    return null;
+  }
+  const model = stringOrNull(value.model);
+  const text = stringOrNull(value.text);
+  if (model === null || text === null) {
+    return null;
+  }
+  const result: ArenaResult = {
+    model,
+    text,
+    durationMs: numberOrNull(value.durationMs) ?? 0,
+    costUsd: numberOrNull(value.costUsd) ?? 0,
+    pricingKnown: value.pricingKnown === true,
+    inputTokens: numberOrNull(value.inputTokens) ?? 0,
+    outputTokens: numberOrNull(value.outputTokens) ?? 0,
+  };
+  if (isPlainObject(value.error)) {
+    result.error = value.error as unknown as NonNullable<ArenaResult["error"]>;
+  }
+  return result;
+}
+
+function readArena(value: unknown): ArenaRun | null {
+  if (!isPlainObject(value)) {
+    return null;
+  }
+  const prompt = stringOrNull(value.prompt);
+  const at = stringOrNull(value.at);
+  if (prompt === null || at === null || !Array.isArray(value.results)) {
+    return null;
+  }
+  const results = (value.results as unknown[])
+    .map(readArenaResult)
+    .filter((result): result is ArenaResult => result !== null);
+  if (results.length === 0) {
+    return null;
+  }
+  return { prompt, at, results };
 }
 
 function readMessage(value: unknown): UIMessage | null {
@@ -183,13 +224,25 @@ export function normalizeThread(value: unknown): StoredThread | null {
     .map(readMessage)
     .filter((message): message is UIMessage => message !== null)
     .slice(-MAX_THREADS_MESSAGES);
+  const arena = readArena(value.arena);
   return {
     id,
     title: title.length > 0 ? title.slice(0, TITLE_LIMIT) : NEW_THREAD_TITLE,
     createdAt,
     updatedAt,
     messages,
+    ...(arena !== null ? { arena } : {}),
   };
+}
+
+/** The list is full, so a new chat removes the oldest one. */
+export function atThreadCap(threads: readonly StoredThread[]): boolean {
+  return threads.length >= MAX_THREADS;
+}
+
+/** The chat is full, so the oldest message leaves on the next save. */
+export function atMessageCap(messages: readonly UIMessage[]): boolean {
+  return messages.length >= MAX_THREADS_MESSAGES;
 }
 
 /** Newest first, then a cap. One account cannot fill the storage with chats. */
@@ -229,11 +282,13 @@ export function readThreads(storage: StorageLike): StoredThread[] {
 }
 
 export function writeThreads(storage: StorageLike, threads: readonly StoredThread[]): void {
+  // The cap applies at the write, so the record cannot grow without a bound.
+  const capped = orderThreads(threads).map((thread) => ({
+    ...thread,
+    messages: thread.messages.slice(-MAX_THREADS_MESSAGES),
+  }));
   try {
-    storage.setItem(
-      THREADS_STORAGE_KEY,
-      JSON.stringify(createDocument(THREADS_SCHEMA_VERSION, orderThreads(threads))),
-    );
+    storage.setItem(THREADS_STORAGE_KEY, JSON.stringify(createDocument(THREADS_SCHEMA_VERSION, capped)));
   } catch {
     // A full storage must not stop a chat.
   }

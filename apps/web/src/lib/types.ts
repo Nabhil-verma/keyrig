@@ -1,5 +1,5 @@
 import type { AgentEvent, KeyrigScene } from "@keyrig/core";
-import type { KeyrigErrorJSON } from "@keyrig/shared";
+import { createId, type KeyrigErrorJSON } from "@keyrig/shared";
 
 export interface UIMessage {
   id: string;
@@ -26,6 +26,12 @@ export interface UIMessage {
   scene?: KeyrigScene;
 }
 
+export interface ArenaRun {
+  prompt: string;
+  at: string;
+  results: ArenaResult[];
+}
+
 export interface ArenaResult {
   model: string;
   text: string;
@@ -38,8 +44,5 @@ export interface ArenaResult {
 }
 
 export function newId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `id_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  return createId("id_");
 }

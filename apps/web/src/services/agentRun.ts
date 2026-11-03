@@ -20,7 +20,7 @@ import type { Workspace } from "../stores/workspace";
  * and the GitHub connection. Every effect stays here, in the app layer.
  */
 
-export interface GithubState {
+interface GithubState {
   token: string | null;
   owner: string;
   repo: string;
@@ -28,7 +28,7 @@ export interface GithubState {
   allowCommit: boolean;
 }
 
-export interface ToolTurnOptions {
+interface ToolTurnOptions {
   messages: ChatMessage[];
   enabled: string[];
   autoApproveWrites: boolean;
@@ -41,7 +41,7 @@ export interface ToolTurnOptions {
   onEvent: (event: AgentEvent) => void;
 }
 
-export interface ToolTurnOutcome {
+interface ToolTurnOutcome {
   text: string;
   events: AgentEvent[];
   hitLimit: boolean;

@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import {
   GITHUB_TOKEN_NAME,
   parseRepo,
@@ -9,19 +9,44 @@ import {
   type UsageBus,
 } from "@keyrig/core";
 import type { Catalog, Pricing, ProviderManifest } from "@keyrig/providers";
+import type { KeyrigErrorJSON } from "@keyrig/shared";
 import { expandContext } from "../../lib/composerTokens";
 import { createDeltaBuffer, type DeltaBuffer } from "../../lib/deltaBuffer";
+import { trimExchanges } from "../../lib/trimMessages";
 import { newId, type ArenaResult, type UIMessage } from "../../lib/types";
 import { runToolTurn } from "../../services/agentRun";
 import type { AccountConnections } from "../../stores/connections";
 import { activeTools, type AgentSettings } from "../../stores/toolSettings";
 import type { Workspace, WorkspaceFile } from "../../stores/workspace";
-import { safeError, toChatMessages } from "./chatTurnHelpers";
+import { safeError, toChatMessages, withOtherKeyAction } from "./chatTurnHelpers";
+
+/** ER-04: the device knows that it is offline. The card stays until the network is back. */
+const OFFLINE_ERROR: KeyrigErrorJSON = {
+  code: "network_offline",
+  category: "network",
+  message: "This device is offline. Reconnect, then check the network again.",
+  retryable: true,
+  remediation: { action: "check_network" },
+  details: {},
+};
+
+/** ER-04: a short chat has nothing to remove, so offer a larger context instead. */
+const NOTHING_TO_TRIM_ERROR: KeyrigErrorJSON = {
+  code: "context_overflow",
+  category: "context_overflow",
+  message: "There is no older exchange to remove. Pick a model with a larger context, or start a new chat.",
+  retryable: false,
+  remediation: { action: "switch_model" },
+  details: {},
+};
 
 interface UseChatTurnsOptions {
   session: SignedInAccount | null;
   needsKey: boolean;
   selectedKey: KeyView | undefined;
+  /** The keys for this provider. A second key can take over a failed request. */
+  keys: KeyView[];
+  onKeyChange: (id: string) => void;
   manifest: ProviderManifest;
   modelId: string;
   providerId: string;
@@ -56,6 +81,8 @@ export function useChatTurns(options: UseChatTurnsOptions) {
     session,
     needsKey,
     selectedKey,
+    keys,
+    onKeyChange,
     manifest,
     modelId,
     providerId,
@@ -81,9 +108,13 @@ export function useChatTurns(options: UseChatTurnsOptions) {
     onOpenRoute,
   } = options;
 
+  /** The keys that already failed one answer. A new key follows the failed one. */
+  const triedKeys = useRef(new Map<string, Set<string>>());
+
   const runAssistant = useCallback(
-    async (assistantId: string, history: UIMessage[]): Promise<void> => {
-      if (!session || (needsKey && !selectedKey)) {
+    async (assistantId: string, history: UIMessage[], keyOverride?: KeyView): Promise<void> => {
+      const key = keyOverride ?? selectedKey;
+      if (!session || (needsKey && !key)) {
         return;
       }
       const controller = new AbortController();
@@ -109,7 +140,7 @@ export function useChatTurns(options: UseChatTurnsOptions) {
       try {
         const outcome = await sendChat({
           vault: session.vault,
-          ...(selectedKey ? { keyId: selectedKey.id } : {}),
+          ...(key ? { keyId: key.id } : {}),
           manifest,
           model: modelId.trim(),
           messages: toChatMessages(history),
@@ -124,6 +155,7 @@ export function useChatTurns(options: UseChatTurnsOptions) {
         });
         // The full text replaces the streamed text, so a late flush must not run.
         buffer.clear();
+        triedKeys.current.delete(assistantId);
         setMessages((current) =>
           current.map((message) =>
             message.id === assistantId
@@ -149,7 +181,13 @@ export function useChatTurns(options: UseChatTurnsOptions) {
       } catch (caught) {
         // Keep the text that arrived before the failure (PV-08).
         buffer.flush();
-        const error = safeError(caught);
+        const tried = triedKeys.current.get(assistantId) ?? new Set<string>();
+        if (key !== undefined) {
+          tried.add(key.id);
+          triedKeys.current.set(assistantId, tried);
+        }
+        const otherKey = keys.some((item) => !tried.has(item.id));
+        const error = withOtherKeyAction(safeError(caught), otherKey);
         setMessages((current) =>
           current.map((message) => (message.id === assistantId ? { ...message, error } : message)),
         );
@@ -164,6 +202,7 @@ export function useChatTurns(options: UseChatTurnsOptions) {
       session,
       needsKey,
       selectedKey,
+      keys,
       manifest,
       modelId,
       providerId,
@@ -397,21 +436,89 @@ export function useChatTurns(options: UseChatTurnsOptions) {
     setApproval(null);
   }, [abortRef, approvalRef, setApproval]);
 
+  /** Clear one failed answer and send it again with the history it must use. */
+  const retryWith = useCallback(
+    (message: UIMessage, history: UIMessage[], base: readonly UIMessage[], keyOverride?: KeyView): void => {
+      setMessages(
+        base.map((item) => {
+          if (item.id !== message.id) {
+            return item;
+          }
+          const { error: _removed, ...rest } = item;
+          return { ...rest, content: "" };
+        }),
+      );
+      void runAssistant(message.id, history, keyOverride);
+    },
+    [runAssistant, setMessages],
+  );
+
   const onErrorAction = useCallback(
     (action: string, message: UIMessage): void => {
-      if (action === "retry") {
+      if (action === "retry" || action === "check_network") {
+        if (action === "check_network" && navigator.onLine === false) {
+          setMessages((current) =>
+            current.map((item) => (item.id === message.id ? { ...item, error: OFFLINE_ERROR } : item)),
+          );
+          return;
+        }
         const index = messages.findIndex((item) => item.id === message.id);
-        const history = index === -1 ? messages : messages.slice(0, index);
-        setMessages((current) =>
-          current.map((item) => {
-            if (item.id !== message.id) {
-              return item;
-            }
-            const { error: _removed, ...rest } = item;
-            return { ...rest, content: "" };
-          }),
+        retryWith(message, index === -1 ? messages : messages.slice(0, index), messages);
+        return;
+      }
+      if (action === "reduce_context") {
+        const trimmed = trimExchanges(messages);
+        if (trimmed.length === messages.length) {
+          setMessages((current) =>
+            current.map((item) =>
+              item.id === message.id ? { ...item, error: NOTHING_TO_TRIM_ERROR } : item,
+            ),
+          );
+          return;
+        }
+        const removed = messages.length - trimmed.length;
+        const confirmed = window.confirm(
+          `Remove the ${removed} oldest message${removed === 1 ? "" : "s"} from this chat and try again?`,
         );
-        void runAssistant(message.id, history);
+        if (!confirmed) {
+          return;
+        }
+        const index = trimmed.findIndex((item) => item.id === message.id);
+        if (index === -1) {
+          // The failed turn is older than the kept exchanges, so the trim removes it.
+          setMessages(trimmed);
+          return;
+        }
+        retryWith(message, trimmed.slice(0, index), trimmed);
+        return;
+      }
+      if (action === "change_prompt") {
+        const index = messages.findIndex((item) => item.id === message.id);
+        if (index === -1) {
+          return;
+        }
+        const previous = messages
+          .slice(0, index)
+          .reverse()
+          .find((item) => item.role === "user");
+        setMessages((current) =>
+          current.filter((item) => item.id !== message.id && item.id !== previous?.id),
+        );
+        return;
+      }
+      if (action === "use_other_key") {
+        // Every key of the run so far is spent. The next key is the one left.
+        const tried = triedKeys.current.get(message.id) ?? new Set<string>();
+        const other =
+          keys.find((item) => !tried.has(item.id) && item.id !== selectedKey?.id) ??
+          keys.find((item) => !tried.has(item.id));
+        if (other === undefined) {
+          onOpenKeys();
+          return;
+        }
+        onKeyChange(other.id);
+        const index = messages.findIndex((item) => item.id === message.id);
+        retryWith(message, index === -1 ? messages : messages.slice(0, index), messages, other);
         return;
       }
       if (action === "check_key" || action === "check_settings") {
@@ -426,7 +533,7 @@ export function useChatTurns(options: UseChatTurnsOptions) {
         setMessages((current) => current.filter((item) => item.id !== message.id));
       }
     },
-    [messages, onOpenKeys, onOpenRoute, runAssistant, setMessages],
+    [messages, keys, selectedKey, onKeyChange, onOpenKeys, onOpenRoute, retryWith, setMessages],
   );
 
   const runArena = useCallback(

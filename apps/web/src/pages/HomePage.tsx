@@ -4,17 +4,16 @@ import {
   animate,
   motion,
   useInView,
-  useMotionTemplate,
-  useMotionValue,
   useScroll,
   useSpring,
   useTransform,
+  type MotionValue,
 } from "framer-motion";
 import { BUILTIN_MANIFESTS } from "@keyrig/providers";
 import { SiteFooter, SiteHeader } from "../app/SiteChrome";
 import { Link } from "../app/router";
 import { EASE_OUT, fadeUp, stagger } from "../lib/motion";
-import { BrandMark } from "../components/ui/BrandMark";
+import { KeyRigObject } from "../components/KeyRigObject";
 import { Icon, type IconName } from "../components/ui/Icon";
 
 /** The three nodes of the routing visual. Each node has one example answer. */
@@ -48,15 +47,17 @@ const EXAMPLES = [
   },
 ] as const;
 
-const WORD_LINE = {
-  hidden: { y: "105%" },
-  show: { y: "0%", transition: { duration: 0.9, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] } },
-};
+const VIEWPORT = { once: true, margin: "-80px" } as const;
 
-function LineReveal({ children, className }: { children: string; className?: string }) {
+function LineReveal({ children, delay = 0, className }: { children: string; delay?: number; className?: string }) {
   return (
-    <span className="line">
-      <motion.span className={className} variants={WORD_LINE}>
+    <span className={`hp-line ${className ?? ""}`}>
+      <motion.span
+        variants={{
+          hidden: { y: "108%" },
+          show: { y: "0%", transition: { duration: 0.95, delay, ease: EASE_OUT } },
+        }}
+      >
         {children}
       </motion.span>
     </span>
@@ -83,55 +84,59 @@ function CountUp({ to }: { to: number }) {
   return <span ref={ref}>{value}</span>;
 }
 
-/** The hero glow follows the pointer. The glow is a CSS gradient driven by motion values. */
+/** The hero glow follows the pointer. The glow is a CSS gradient driven by two variables. */
 function Hero() {
-  const ref = useRef<HTMLElement | null>(null);
-  const px = useMotionValue(50);
-  const py = useMotionValue(30);
-  const sx = useSpring(px, { stiffness: 120, damping: 22 });
-  const sy = useSpring(py, { stiffness: 120, damping: 22 });
-  const spot = useMotionTemplate`radial-gradient(560px circle at ${sx}% ${sy}%, var(--spot), transparent 70%)`;
-
   const onPointerMove = (event: ReactPointerEvent<HTMLElement>): void => {
     const rect = event.currentTarget.getBoundingClientRect();
-    px.set(((event.clientX - rect.left) / rect.width) * 100);
-    py.set(((event.clientY - rect.top) / rect.height) * 100);
+    event.currentTarget.style.setProperty("--hx", `${event.clientX - rect.left}px`);
+    event.currentTarget.style.setProperty("--hy", `${event.clientY - rect.top}px`);
   };
 
   return (
-    <section ref={ref} className="hero" onPointerMove={onPointerMove}>
-      <motion.div className="hero-spot" style={{ background: spot }} aria-hidden="true" />
-      <motion.span
-        className="orb orb--amber"
-        aria-hidden="true"
-        animate={{ x: [0, 40, -20, 0], y: [0, -30, 20, 0] }}
-        transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <motion.span
-        className="orb orb--cyan"
-        aria-hidden="true"
-        animate={{ x: [0, -50, 30, 0], y: [0, 40, -20, 0] }}
-        transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
-      />
+    <section className="hp-hero" onPointerMove={onPointerMove}>
+      <div className="hp-hero-grid" aria-hidden="true" />
+      <div className="hp-hero-glow" aria-hidden="true" />
 
-      <div className="hero-grid">
-        <motion.div className="hero-copy" variants={stagger(0.12, 0.1)} initial="hidden" animate="show">
-          <motion.span variants={fadeUp} className="hero-badge">
-            <Icon name="shield" size={12} />
-            Keys stay in this browser. They go only to your provider.
-          </motion.span>
-
-          <motion.h1 className="display" variants={stagger(0.12)} initial="hidden" animate="show">
-            <LineReveal>One key.</LineReveal>
-            <LineReveal className="display-accent">Every model.</LineReveal>
-          </motion.h1>
-
-          <motion.p variants={fadeUp} className="lead">
-            keyrig is a BYOK AI harness. Add your provider keys once. Route each prompt to the model that
-            fits. Every answer shows its model, its key label and its estimated cost.
+      <div className="hp-wrap hp-hero-inner">
+        <div className="hp-hero-copy">
+          <motion.p
+            className="hp-kicker"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6 }}
+          >
+            <span className="hp-kicker-dot" />
+            BYOK AI harness
+            <span className="hp-kicker-rule" />
+            Keys stay on this device
           </motion.p>
 
-          <motion.div variants={fadeUp} className="hero-actions">
+          <motion.h1 className="hp-display" variants={stagger(0.1, 0.15)} initial="hidden" animate="show">
+            <LineReveal>One key.</LineReveal>
+            <LineReveal delay={0.08} className="hp-line--cyan">
+              Every model.
+            </LineReveal>
+            <LineReveal delay={0.16} className="hp-line--outline">
+              No middleman.
+            </LineReveal>
+          </motion.h1>
+
+          <motion.p
+            className="hp-lead"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.42, ease: EASE_OUT }}
+          >
+            keyrig is a BYOK AI harness. Add your provider keys once. Send each prompt to the model that fits.
+            Every answer shows its model, its key label and the estimated cost.
+          </motion.p>
+
+          <motion.div
+            className="hp-actions"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.52, ease: EASE_OUT }}
+          >
             <Link to="/app" className="btn btn--primary btn--lg btn--glow">
               Open keyrig
               <Icon name="arrow" size={15} />
@@ -141,7 +146,12 @@ function Hero() {
             </Link>
           </motion.div>
 
-          <motion.ul variants={fadeUp} className="hero-proof">
+          <motion.ul
+            className="hp-proof"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.7, delay: 0.62 }}
+          >
             <li>
               <Icon name="globe" size={13} /> No server
             </li>
@@ -152,146 +162,103 @@ function Hero() {
               <Icon name="check" size={13} /> MIT license
             </li>
           </motion.ul>
-        </motion.div>
+        </div>
 
-        <RoutingVisual />
+        <motion.div
+          className="hp-hero-object"
+          initial={{ opacity: 0, scale: 0.92 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 1.2, delay: 0.2, ease: EASE_OUT }}
+        >
+          <span className="hp-object-label hp-object-label--amber">
+            <span /> Key
+          </span>
+          <span className="hp-object-label hp-object-label--cyan">
+            <span /> Link
+          </span>
+          <KeyRigObject />
+        </motion.div>
       </div>
+
+      <div className="hp-wrap">
+        <ProvenanceBar />
+      </div>
+
+      <span className="hp-scroll" aria-hidden="true">
+        Scroll
+        <span className="hp-scroll-line" />
+      </span>
     </section>
   );
 }
 
-const HUB = { x: 110, y: 150 };
-const NODE_X = 300;
-const NODE_Y = [50, 150, 250];
-
-/** The routing visual: one hub, three provider nodes, animated packets and a cycling example answer. */
-function RoutingVisual() {
+/** One example answer with its provenance. It cycles while the visitor reads the hero. */
+function ProvenanceBar() {
   const [active, setActive] = useState(0);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setActive((value) => (value + 1) % EXAMPLES.length), 3800);
+    const timer = window.setInterval(() => setActive((value) => (value + 1) % EXAMPLES.length), 4200);
     return () => window.clearInterval(timer);
   }, []);
 
-  const paths = NODE_Y.map((y) => `M${HUB.x} ${HUB.y} C 200 ${HUB.y}, 220 ${y}, ${NODE_X} ${y}`);
   const example = EXAMPLES[active] ?? EXAMPLES[0];
 
   return (
-    <motion.div
-      className="routing"
-      initial={{ opacity: 0, scale: 0.96 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.9, delay: 0.3, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
-    >
-      <div className="routing-diagram">
-        <svg className="routing-svg" viewBox="0 0 480 300" aria-hidden="true">
-          <defs>
-            <filter id="packet-glow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="3" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-          {paths.map((d, index) => (
-            <motion.path
-              key={d}
-              d={d}
-              className={index === active ? "route-line route-line--active" : "route-line"}
-              initial={{ pathLength: 0 }}
-              animate={{ pathLength: 1 }}
-              transition={{ duration: 1.4, delay: 0.5 + index * 0.15, ease: "easeInOut" }}
-            />
-          ))}
-          {paths.map((d, index) => (
-            <circle key={`packet-${d}`} r="4" className="packet" filter="url(#packet-glow)">
-              <animateMotion dur="2.6s" begin={`${index * 0.85}s`} repeatCount="indefinite" path={d} />
-            </circle>
-          ))}
-        </svg>
+    <div className="hp-prov">
+      <span className="hp-prov-label">
+        <span className="hp-live-dot" />
+        Live example
+      </span>
 
-        <div className="hub" style={{ left: `${(HUB.x / 480) * 100}%`, top: `${(HUB.y / 300) * 100}%` }}>
-          <motion.span
-            className="hub-ring"
-            aria-hidden="true"
-            animate={{ scale: [1, 1.35, 1], opacity: [0.5, 0, 0.5] }}
-            transition={{ duration: 2.6, repeat: Infinity, ease: "easeOut" }}
-          />
-          <span className="hub-core">
-            <BrandMark size={52} />
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={example.model}
+          className="hp-prov-body"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.3, ease: EASE_OUT }}
+        >
+          <p className="hp-prov-answer">{example.text}</p>
+          <span className="hp-prov-chips">
+            <span className="chip chip--cyan">
+              <Icon name="cpu" size={10} />
+              {example.model}
+            </span>
+            <span className="chip">
+              <Icon name="key" size={10} />
+              {example.keyLabel}
+            </span>
+            <span className="chip">{example.tokens}</span>
+            <span className={`chip ${example.priced ? "" : "chip--amber"}`}>
+              <Icon name="wallet" size={10} />
+              {example.cost}
+            </span>
           </span>
-        </div>
+        </motion.div>
+      </AnimatePresence>
 
-        {EXAMPLES.map((item, index) => {
-          const nodeY = NODE_Y[index] ?? 0;
-          return (
-            <motion.div
-              key={item.provider}
-              className="route-node"
-              data-active={index === active}
-              style={{ left: `${(NODE_X / 480) * 100}%`, top: `${(nodeY / 300) * 100}%` }}
-              animate={{ y: [0, -5, 0] }}
-              transition={{ duration: 4 + index, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <span className="route-node-dot" />
-              <span className="route-node-name">{item.provider}</span>
-              <span className="route-node-model mono">{item.model}</span>
-            </motion.div>
-          );
-        })}
-      </div>
-
-      <div className="answer-card" aria-live="polite">
-        <div className="answer-head">
-          <span className="eyebrow eyebrow--amber">
-            <Icon name="spark" size={11} />
-            Example answer
-          </span>
-          <span className="chip chip--plain">{example.keyLabel}</span>
-        </div>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={example.model}
-            className="answer-body"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.35 }}
-          >
-            <p>{example.text}</p>
-            <div className="answer-meta">
-              <span className="chip chip--cyan">
-                <Icon name="cpu" size={10} />
-                {example.model}
-              </span>
-              <span className="chip">{example.tokens}</span>
-              <span className={`chip ${example.priced ? "" : "chip--amber"}`}>
-                <Icon name="wallet" size={10} />
-                {example.cost}
-              </span>
-            </div>
-          </motion.div>
-        </AnimatePresence>
-      </div>
-    </motion.div>
+      <span className="hp-prov-count mono">
+        {String(active + 1).padStart(2, "0")} / {String(EXAMPLES.length).padStart(2, "0")}
+      </span>
+    </div>
   );
 }
 
-function ProviderMarquee() {
+function ProviderTicker() {
   const names = BUILTIN_MANIFESTS.map((manifest) => manifest.displayName);
   const row = [...names, ...names];
   return (
-    <div className="marquee" aria-label="Supported providers">
+    <div className="hp-ticker" aria-label="Supported providers">
       <motion.div
-        className="marquee-track"
+        className="hp-ticker-track"
         animate={{ x: ["0%", "-50%"] }}
-        transition={{ duration: 26, ease: "linear", repeat: Infinity }}
+        transition={{ duration: 34, ease: "linear", repeat: Infinity }}
       >
         {row.map((name, index) => (
-          <span key={`${name}-${index}`} className="marquee-item" aria-hidden={index >= names.length}>
+          <span key={`${name}-${index}`} className="hp-ticker-item" aria-hidden={index >= names.length}>
             {name}
-            <span className="marquee-dot" />
+            <span className="hp-ticker-mark" />
           </span>
         ))}
       </motion.div>
@@ -299,23 +266,128 @@ function ProviderMarquee() {
   );
 }
 
-function Stats() {
-  const items = [
-    { value: BUILTIN_MANIFESTS.length, label: "provider types in one manifest format" },
-    { value: 3, label: "facts on every answer: model, key label, cost" },
-    { value: 0, label: "keyrig servers that hold a key" },
-  ];
+const FACTS = [
+  { value: BUILTIN_MANIFESTS.length, label: "provider types in one manifest format", note: "PV-02" },
+  { value: 3, label: "facts on every answer: model, key label, cost", note: "PR-02" },
+  { value: 0, label: "keyrig servers that hold a key", note: "PR-01" },
+];
+
+function Ledger() {
   return (
-    <motion.section className="stats" variants={stagger(0.1)} initial="hidden" whileInView="show" viewport={{ once: true, margin: "-80px" }}>
-      {items.map((item) => (
-        <motion.div key={item.label} className="stat" variants={fadeUp}>
-          <span className="stat-value">
-            <CountUp to={item.value} />
-          </span>
-          <span className="stat-label">{item.label}</span>
+    <section className="hp-section">
+      <div className="hp-wrap">
+        <div className="hp-statement">
+          <span className="hp-index">01 — The harness</span>
+          <h2 className="hp-statement-text">
+            Your key is the only credential. It never leaves <em>this device</em>.
+          </h2>
+        </div>
+
+        <motion.div
+          className="hp-ledger"
+          variants={stagger(0.08)}
+          initial="hidden"
+          whileInView="show"
+          viewport={VIEWPORT}
+        >
+          {FACTS.map((fact) => (
+            <motion.div key={fact.label} className="hp-ledger-cell" variants={fadeUp}>
+              <span className="hp-ledger-value">
+                <CountUp to={fact.value} />
+              </span>
+              <span className="hp-ledger-label">{fact.label}</span>
+              <span className="hp-ledger-note mono">{fact.note}</span>
+            </motion.div>
+          ))}
         </motion.div>
-      ))}
-    </motion.section>
+      </div>
+    </section>
+  );
+}
+
+interface RouteCardProps {
+  item: (typeof EXAMPLES)[number];
+  index: number;
+  progress: MotionValue<number>;
+}
+
+/**
+ * One card of the deck. At the start of the section the cards sit in a stack.
+ * As the visitor scrolls, the cards fan out in 3D and land in a readable row.
+ */
+function RouteCard({ item, index, progress }: RouteCardProps) {
+  const offset = index - 1;
+  const x = useTransform(progress, [0.12, 0.62], [`${offset * 5}%`, `${offset * 108}%`]);
+  const y = useTransform(progress, [0.12, 0.62], [index * 16, 0]);
+  const z = useTransform(progress, [0.12, 0.62], [-190, 0]);
+  const rotateY = useTransform(progress, [0.12, 0.62], [offset * -20, 0]);
+  const rotateX = useTransform(progress, [0.12, 0.62], [9, 0]);
+  const opacity = useTransform(progress, [0.08, 0.34], [0.45, 1]);
+  const scale = useTransform(progress, [0.12, 0.62], [0.94, 1]);
+
+  return (
+    <motion.article
+      className="hp-card"
+      style={{ x, y, z, rotateY, rotateX, opacity, scale }}
+      aria-label={`${item.provider} ${item.model}`}
+    >
+      <header className="hp-card-head">
+        <span className="hp-card-provider">{item.provider}</span>
+        <span className="hp-card-index mono">0{index + 1}</span>
+      </header>
+
+      <p className="hp-card-model mono">{item.model}</p>
+      <p className="hp-card-text">{item.text}</p>
+
+      <div className="hp-card-chips">
+        <span className="chip">
+          <Icon name="key" size={10} />
+          {item.keyLabel}
+        </span>
+        <span className="chip">{item.tokens}</span>
+        <span className={`chip ${item.priced ? "chip--cyan" : "chip--amber"}`}>
+          <Icon name="wallet" size={10} />
+          {item.cost}
+        </span>
+      </div>
+
+      <footer className="hp-card-foot mono">
+        <span>keyrig routes one prompt</span>
+        <span>{item.priced ? "priced" : "local"}</span>
+      </footer>
+    </motion.article>
+  );
+}
+
+function RouteScene() {
+  const ref = useRef<HTMLElement | null>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
+  const progress = useSpring(scrollYProgress, { stiffness: 90, damping: 28, restDelta: 0.001 });
+
+  return (
+    <section className="hp-scene" id="rig" ref={ref}>
+      <div className="hp-stage">
+        <div className="hp-wrap hp-stage-head">
+          <span className="hp-index">02 — The rig</span>
+          <h2 className="hp-h2">One prompt. Three routes. One clear answer.</h2>
+          <p className="hp-stage-note">
+            Scroll to fan out the rig. Each card keeps the model, the key label and the cost of its answer.
+          </p>
+        </div>
+
+        <div className="hp-deck">
+          {EXAMPLES.map((item, index) => (
+            <RouteCard key={item.provider} item={item} index={index} progress={progress} />
+          ))}
+        </div>
+
+        <div className="hp-wrap hp-stage-foot mono" aria-hidden="true">
+          <span>one hub</span>
+          <span>three nodes</span>
+          <span>no shared state</span>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -323,341 +395,280 @@ interface FeatureSpec {
   icon: IconName;
   title: string;
   text: string;
-  wide?: boolean;
+  span: number;
+  note: string;
 }
 
 const FEATURES: FeatureSpec[] = [
   {
     icon: "lock",
     title: "Encrypted vault",
-    text: "Your password opens an AES-GCM vault on this device. The password is never stored.",
-    wide: true,
+    text: "Your password opens an AES-GCM vault on this device. keyrig never stores the password.",
+    span: 7,
+    note: "KS-01",
   },
-  { icon: "route", title: "Route per prompt", text: "Pick a provider and a model for each prompt. Change them at any time." },
-  { icon: "arena", title: "Model arena", text: "Send one prompt to many models. Compare time, cost and answer side by side." },
-  { icon: "wallet", title: "Cost in view", text: "Each answer shows input tokens, output tokens and an estimated cost.", wide: true },
-  { icon: "check", title: "Provenance on every reply", text: "The model, the key label and the token count stay with each answer.", wide: true },
-  { icon: "cpu", title: "Local models too", text: "Connect Ollama, LM Studio or any OpenAI-compatible server on your machine." },
+  {
+    icon: "route",
+    title: "Route per prompt",
+    text: "Pick a provider and a model for each prompt. Change them at any time.",
+    span: 5,
+    note: "PV-03",
+  },
+  {
+    icon: "arena",
+    title: "Model arena",
+    text: "Send one prompt to many models. Compare time, cost and answer side by side.",
+    span: 4,
+    note: "UX-01",
+  },
+  {
+    icon: "wallet",
+    title: "Cost in view",
+    text: "Each answer shows input tokens, output tokens and an estimated cost.",
+    span: 4,
+    note: "CO-01",
+  },
+  {
+    icon: "check",
+    title: "Provenance",
+    text: "The model and the key label stay with the answer. A model swap shows a notice.",
+    span: 4,
+    note: "PR-02",
+  },
+  {
+    icon: "cpu",
+    title: "Local models too",
+    text: "Connect Ollama, LM Studio or any OpenAI-compatible server on your machine. A local route needs no key.",
+    span: 12,
+    note: "PV-05",
+  },
 ];
 
-/** A feature card. The card glow follows the pointer through two CSS variables. */
-function BentoCard({ spec }: { spec: FeatureSpec }) {
+/** A feature cell. The cell glow follows the pointer through two CSS variables. */
+function FeatureCell({ spec }: { spec: FeatureSpec }) {
   const onPointerMove = (event: ReactPointerEvent<HTMLElement>): void => {
     const rect = event.currentTarget.getBoundingClientRect();
     event.currentTarget.style.setProperty("--mx", `${event.clientX - rect.left}px`);
     event.currentTarget.style.setProperty("--my", `${event.clientY - rect.top}px`);
   };
+
   return (
-    <motion.article className={`bento-card ${spec.wide ? "bento-card--wide" : ""}`} variants={fadeUp} onPointerMove={onPointerMove}>
-      <span className="feature-icon">
-        <Icon name={spec.icon} size={16} />
-      </span>
-      <h3>{spec.title}</h3>
-      <p>{spec.text}</p>
+    <motion.article
+      className={`hp-cell hp-cell--${spec.span}`}
+      variants={fadeUp}
+      onPointerMove={onPointerMove}
+    >
+      <div className="hp-cell-head">
+        <span className="hp-cell-icon">
+          <Icon name={spec.icon} size={16} />
+        </span>
+        <span className="hp-cell-num mono">{spec.note}</span>
+      </div>
+      <h3 className="hp-cell-title">{spec.title}</h3>
+      <p className="hp-cell-text">{spec.text}</p>
     </motion.article>
   );
 }
 
 function Features() {
   return (
-    <section className="section" id="features">
-      <motion.div className="section-head" variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true, margin: "-80px" }}>
-        <span className="eyebrow eyebrow--cyan">What you get</span>
-        <h2>Every answer. Every key. Every cost.</h2>
-      </motion.div>
-      <motion.div className="bento" variants={stagger(0.08)} initial="hidden" whileInView="show" viewport={{ once: true, margin: "-60px" }}>
-        {FEATURES.map((spec) => (
-          <BentoCard key={spec.title} spec={spec} />
-        ))}
-      </motion.div>
+    <section className="hp-section" id="features">
+      <div className="hp-wrap">
+        <div className="hp-section-head">
+          <span className="hp-index">03 — The parts</span>
+          <div>
+            <h2 className="hp-h2">The parts that matter.</h2>
+            <p className="hp-section-note">
+              Six rules shape the app. Each rule has an ID that a test can prove.
+            </p>
+          </div>
+        </div>
+
+        <motion.div
+          className="hp-grid"
+          variants={stagger(0.06)}
+          initial="hidden"
+          whileInView="show"
+          viewport={VIEWPORT}
+        >
+          {FEATURES.map((spec) => (
+            <FeatureCell key={spec.title} spec={spec} />
+          ))}
+        </motion.div>
+      </div>
     </section>
   );
 }
 
 const STEPS = [
-  { num: "01", title: "Create an account", text: "Your username and password open a vault on this device." },
-  { num: "02", title: "Add a key", text: "Save a provider key. keyrig encrypts it before the save." },
-  { num: "03", title: "Choose a model", text: "Pick a provider and a model. Change them at any time." },
-  { num: "04", title: "Send a prompt", text: "Read the answer with its model, key label and estimated cost." },
+  {
+    num: "01",
+    title: "Create an account",
+    text: "Your username and password open a vault on this device. keyrig never stores the password.",
+  },
+  {
+    num: "02",
+    title: "Add a key",
+    text: "Save a provider key. keyrig encrypts the key before the save.",
+  },
+  {
+    num: "03",
+    title: "Choose a model",
+    text: "Pick a provider and a model. Change them at any time.",
+  },
+  {
+    num: "04",
+    title: "Send a prompt",
+    text: "Read the answer with its model, key label and estimated cost.",
+  },
 ];
 
-/** The preview of the active step. The content matches the step on the left. */
-function StepFigure({ active }: { active: number }) {
-  const step = STEPS[active] ?? STEPS[STEPS.length - 1]!;
-
+function Protocol() {
   return (
-    <aside className="how-figure" aria-label={`Step ${step.num}: ${step.title}`}>
-      <div className="figure-head">
-        <span className="eyebrow eyebrow--cyan">
-          <Icon name="route" size={11} />
-          Step {step.num}
-        </span>
-        <span className="chip chip--plain">{step.title}</span>
-      </div>
-
-      <AnimatePresence mode="wait" initial={false}>
+    <section className="hp-section" id="how">
+      <div className="hp-wrap hp-steps">
         <motion.div
-          key={step.num}
-          className="figure-body"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.3, ease: EASE_OUT }}
+          className="hp-steps-intro"
+          variants={fadeUp}
+          initial="hidden"
+          whileInView="show"
+          viewport={VIEWPORT}
         >
-          {active === 0 ? (
-            <div className="figure-stack">
-              <div className="figure-row">
-                <span className="figure-avatar">A</span>
-                <div className="figure-text">
-                  <strong>alice</strong>
-                  <span className="mono">account on this device</span>
-                </div>
-                <span className="chip chip--plain">Owner</span>
-              </div>
-              <div className="figure-panel">
-                <span className="figure-glyph">
-                  <Icon name="lock" size={15} />
-                </span>
-                <div className="figure-text">
-                  <strong>Vault locked</strong>
-                  <p>Your password opens it. keyrig never stores the password.</p>
-                </div>
-              </div>
-              <p className="figure-note mono">AES-GCM · PBKDF2 · this browser only</p>
-            </div>
-          ) : null}
-
-          {active === 1 ? (
-            <div className="figure-stack">
-              <div className="figure-panel">
-                <span className="figure-glyph figure-glyph--amber">
-                  <Icon name="key" size={15} />
-                </span>
-                <div className="figure-text">
-                  <strong>work</strong>
-                  <span className="mono">•••••••• 4F2A</span>
-                </div>
-                <span className="chip chip--amber">encrypted</span>
-              </div>
-              <div className="figure-row">
-                <span className="mono figure-note">openai</span>
-                <span className="chip chip--plain">API key</span>
-              </div>
-              <p className="figure-note mono">The key goes only to api.openai.com.</p>
-            </div>
-          ) : null}
-
-          {active === 2 ? (
-            <div className="figure-stack">
-              <ul className="figure-models">
-                <li data-active="true">
-                  <span>OpenAI</span>
-                  <span className="mono">gpt-5.4</span>
-                </li>
-                <li>
-                  <span>Anthropic</span>
-                  <span className="mono">claude-sonnet-4-5</span>
-                </li>
-                <li>
-                  <span>Ollama</span>
-                  <span className="mono">llama3.2</span>
-                </li>
-              </ul>
-              <p className="figure-note mono">One provider and one model for each prompt.</p>
-            </div>
-          ) : null}
-
-          {active === 3 ? (
-            <div className="figure-stack">
-              <p className="figure-prompt">Compare these two drafts.</p>
-              <div className="figure-panel figure-panel--answer">
-                <p className="figure-answer">The second draft is shorter and keeps the same point.</p>
-                <div className="figure-chips">
-                  <span className="chip chip--cyan">
-                    <Icon name="cpu" size={10} />
-                    gpt-5.4
-                  </span>
-                  <span className="chip">
-                    <Icon name="key" size={10} />
-                    work
-                  </span>
-                  <span className="chip">812 in · 240 out</span>
-                  <span className="chip">$0.0021 estimated</span>
-                </div>
-              </div>
-            </div>
-          ) : null}
+          <span className="hp-index">04 — The protocol</span>
+          <h2 className="hp-h2">From an empty device to a routed answer.</h2>
+          <p className="hp-section-note">
+            A key goes only to the endpoint that you choose. Sign out and the vault locks.
+          </p>
+          <Link to="/app" className="text-link">
+            Open keyrig
+            <Icon name="arrow" size={14} />
+          </Link>
         </motion.div>
-      </AnimatePresence>
 
-      <div className="figure-foot">
-        <span className="figure-dots" aria-hidden="true">
-          {STEPS.map((item, index) => (
-            <span key={item.num} className="figure-dot" data-active={index === active} />
+        <ol className="hp-step-list">
+          {STEPS.map((step, index) => (
+            <motion.li
+              key={step.num}
+              className="hp-step"
+              variants={fadeUp}
+              initial="hidden"
+              whileInView="show"
+              viewport={VIEWPORT}
+              transition={{ delay: index * 0.04 }}
+            >
+              <span className="hp-step-num mono">{step.num}</span>
+              <div className="hp-step-body">
+                <h3 className="hp-step-title">{step.title}</h3>
+                <p className="hp-step-text">{step.text}</p>
+              </div>
+            </motion.li>
           ))}
-        </span>
-        <span>Example data</span>
-      </div>
-    </aside>
-  );
-}
-
-function Steps() {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start 75%", "end 55%"] });
-  const scaleY = useSpring(scrollYProgress, { stiffness: 120, damping: 28 });
-  const [active, setActive] = useState(0);
-  const stepRefs = useRef<Array<HTMLLIElement | null>>([]);
-
-  // While the list is on screen, the step nearest the middle of the screen sets
-  // the figure. A pointer over a step takes over until the next scroll.
-  useEffect(() => {
-    let frame = 0;
-    const pick = (): void => {
-      frame = 0;
-      const list = ref.current?.getBoundingClientRect();
-      if (!list || list.bottom < 0 || list.top > window.innerHeight) {
-        return;
-      }
-      const middle = window.innerHeight / 2;
-      let nearest = -1;
-      let nearestGap = Infinity;
-      stepRefs.current.forEach((node, index) => {
-        if (!node) {
-          return;
-        }
-        const rect = node.getBoundingClientRect();
-        const gap = Math.abs(rect.top + rect.height / 2 - middle);
-        if (gap < nearestGap) {
-          nearestGap = gap;
-          nearest = index;
-        }
-      });
-      if (nearest >= 0) {
-        setActive(nearest);
-      }
-    };
-    const onScroll = (): void => {
-      if (frame === 0) {
-        frame = requestAnimationFrame(pick);
-      }
-    };
-    pick();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      if (frame !== 0) {
-        cancelAnimationFrame(frame);
-      }
-    };
-  }, []);
-
-  return (
-    <section className="section" id="how">
-      <motion.div className="section-head" variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true, margin: "-80px" }}>
-        <span className="eyebrow eyebrow--amber">How it works</span>
-        <h2>From an empty device to a routed answer.</h2>
-      </motion.div>
-      <div className="how-grid">
-        <div className="how-main">
-          <div className="timeline" ref={ref}>
-            <span className="timeline-track" aria-hidden="true">
-              <motion.span className="timeline-fill" style={{ scaleY }} />
-            </span>
-            <ol className="timeline-list">
-              {STEPS.map((step, index) => (
-                <motion.li
-                  key={step.num}
-                  className="timeline-step"
-                  data-active={index === active}
-                  ref={(node) => {
-                    stepRefs.current[index] = node;
-                  }}
-                  data-index={index}
-                  onPointerEnter={() => setActive(index)}
-                  variants={fadeUp}
-                  initial="hidden"
-                  whileInView="show"
-                  viewport={{ once: true, margin: "-60px" }}
-                >
-                  <span className="step-num">{step.num}</span>
-                  <div>
-                    <h3>{step.title}</h3>
-                    <p>{step.text}</p>
-                  </div>
-                </motion.li>
-              ))}
-            </ol>
-          </div>
-        </div>
-        <StepFigure active={active} />
+        </ol>
       </div>
     </section>
   );
 }
 
-function SecurityBand() {
-  const points = [
-    "Encrypted in this browser with your password.",
-    "No keyrig server receives a key.",
-    "Telemetry is off by default.",
-    "A forgotten password cannot be recovered.",
-  ];
+const SECURITY_POINTS = [
+  "Keys are encrypted in this browser with your password.",
+  "No keyrig server receives a key.",
+  "Telemetry is off by default.",
+  "A forgotten password cannot be recovered.",
+];
+
+function SecuritySeal() {
   return (
-    <motion.section className="band" variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true, margin: "-80px" }}>
-      <div className="band-copy">
-        <span className="eyebrow eyebrow--cyan">
-          <Icon name="shield" size={11} />
-          Keys stay local
-        </span>
-        <h2>Your keys go only to the endpoint you choose.</h2>
-        <Link to="/security" className="text-link">
-          Read the product rules
-          <Icon name="arrow" size={14} />
-        </Link>
+    <div className="hp-seal" aria-hidden="true">
+      <svg viewBox="0 0 220 220" className="hp-seal-svg" focusable="false">
+        <circle className="hp-seal-ring hp-seal-ring--outer" cx="110" cy="110" r="86" />
+        <circle className="hp-seal-ring hp-seal-ring--inner" cx="110" cy="110" r="66" />
+        <path className="hp-seal-check" d="M84 112 102 130 138 92" />
+        <circle className="hp-seal-hub" cx="110" cy="110" r="3" />
+      </svg>
+      <span className="hp-seal-label mono">PR-01 / PR-05</span>
+    </div>
+  );
+}
+
+function SecurityBand() {
+  return (
+    <motion.section
+      className="hp-band"
+      variants={fadeUp}
+      initial="hidden"
+      whileInView="show"
+      viewport={VIEWPORT}
+    >
+      <div className="hp-wrap hp-band-inner">
+        <div className="hp-band-copy">
+          <span className="hp-index">05 — The boundary</span>
+          <h2 className="hp-h2">Your keys go only to the endpoint you choose.</h2>
+          <Link to="/security" className="text-link">
+            Read the product rules
+            <Icon name="arrow" size={14} />
+          </Link>
+        </div>
+
+        <ul className="hp-band-list">
+          {SECURITY_POINTS.map((point) => (
+            <li key={point}>
+              <span className="hp-band-tick">
+                <Icon name="check" size={12} />
+              </span>
+              {point}
+            </li>
+          ))}
+        </ul>
+
+        <SecuritySeal />
       </div>
-      <ul className="band-list">
-        {points.map((point) => (
-          <li key={point}>
-            <span className="band-tick">
-              <Icon name="check" size={12} />
-            </span>
-            {point}
-          </li>
-        ))}
-      </ul>
     </motion.section>
   );
 }
 
 function FinalCta() {
   return (
-    <motion.section className="cta" variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true, margin: "-80px" }}>
-      <span className="cta-mark" aria-hidden="true">
-        <BrandMark size={64} />
-      </span>
-      <h2>Bring your keys. Keep the control.</h2>
-      <p>Open keyrig in this browser. Create an account on this device.</p>
-      <Link to="/app" className="btn btn--primary btn--lg btn--glow">
-        Open keyrig
-        <Icon name="arrow" size={15} />
-      </Link>
-    </motion.section>
+    <section className="hp-cta">
+      <div className="hp-wrap hp-cta-inner">
+        <motion.div variants={fadeUp} initial="hidden" whileInView="show" viewport={VIEWPORT}>
+          <span className="hp-index">06 — Start</span>
+          <h2 className="hp-cta-title">
+            <span>Bring your keys.</span>
+            <span className="hp-cta-title-soft">Keep the control.</span>
+          </h2>
+        </motion.div>
+
+        <motion.div
+          className="hp-cta-side"
+          variants={fadeUp}
+          initial="hidden"
+          whileInView="show"
+          viewport={VIEWPORT}
+        >
+          <p>Open keyrig in this browser. Create an account on this device. Add one key.</p>
+          <Link to="/app" className="btn btn--primary btn--lg btn--glow">
+            Open keyrig
+            <Icon name="arrow" size={15} />
+          </Link>
+          <span className="hp-cta-note mono">No server · Zero telemetry · MIT</span>
+        </motion.div>
+      </div>
+    </section>
   );
 }
 
 export function HomePage() {
   return (
-    <div className="site">
+    <div className="site hp">
+      <div className="hp-grain" aria-hidden="true" />
       <SiteHeader />
-      <main className="home">
+      <main className="hp-main">
         <Hero />
-        <ProviderMarquee />
-        <Stats />
+        <ProviderTicker />
+        <Ledger />
+        <RouteScene />
         <Features />
-        <Steps />
+        <Protocol />
         <SecurityBand />
         <FinalCta />
       </main>

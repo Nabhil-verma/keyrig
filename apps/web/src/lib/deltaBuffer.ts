@@ -7,7 +7,7 @@
  * the same. The render count drops to the frame count.
  */
 
-export type Schedule = (callback: () => void) => void;
+type Schedule = (callback: () => void) => void;
 
 export interface DeltaBuffer {
   /** Add a delta. The first delta of a frame asks for one flush. */

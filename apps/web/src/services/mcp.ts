@@ -1,3 +1,4 @@
+import { bindFetch } from "@keyrig/shared";
 import { checkConnectorUrl } from "../stores/connectors";
 import { normalizeTools, type Connector, type ConnectorTool } from "../stores/connectors";
 
@@ -156,7 +157,7 @@ function readTools(result: unknown): { tools: ConnectorTool[]; cursor: string | 
 /** Read the tool list. This calls nothing on the server. */
 export async function listMcpTools(
   connector: Pick<Connector, "url" | "transport">,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = bindFetch(),
 ): Promise<ConnectorTool[]> {
   const tools: ConnectorTool[] = [];
   let cursor: string | null = null;
@@ -181,7 +182,7 @@ export async function callMcpTool(
   connector: Pick<Connector, "url" | "transport" | "allowedTools">,
   toolName: string,
   args: Record<string, unknown>,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = bindFetch(),
 ): Promise<{ text: string; isError: boolean }> {
   if (!connector.allowedTools?.includes(toolName)) {
     throw new Error(`Allow ${toolName} first.`);
