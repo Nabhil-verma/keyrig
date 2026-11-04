@@ -11,6 +11,11 @@
       "name": "hosted.mjs",
       "type": "esm",
       "path": "./hosted.mjs"
+    },
+    {
+      "name": "backend.mjs",
+      "type": "esm",
+      "path": "./backend.mjs"
     }
   ],
   "assetsDirectory": "./public"

@@ -77,6 +77,16 @@ The tests need no key and no network. Run `npm test`.
 | PR-05 the backend refuses a chat, a cost, usage or a streak | `sites-preview/backend.test.mjs`: "drops no field silently: an extra field is an error" |
 | D-07 the backend is off without a database | `sites-preview/backend.test.mjs`: "refuses every call when the site has no database" |
 | D-07 accounts and roles on the backend | `sites-preview/backend.test.mjs`: "makes the first account the owner and the next account a viewer"; "lets an owner change a role and refuses a change of your own role" |
+| D-07 one owner under a concurrent first sign-up | `sites-preview/backend.test.mjs`: "makes exactly one owner when two first sign-ups overlap" |
+| D-07 a duplicate sign-up is refused, including under a race | `backend.test.mjs`: "returns 409 when the same name signs up twice at once" |
+| D-07 a database failure is a safe error | `backend.test.mjs`: "returns a safe error when the database store fails" |
+| D-07 a backend body is JSON and bounded | `backend.test.mjs`: "refuses a body that is not JSON"; "refuses a body that declares more than the limit before it reads the body" |
+| D-07 the deployment manifest lists every Worker module | `sites-preview/manifest.test.mjs`: "lists each local import, including the backend" |
+| D-07 the Worker attaches the backend when DB is present | `sites-preview/worker.test.mjs`: "runs sign-up, account and marketplace calls through the Worker and SQLite" |
+| D-07 the D1 store creates its schema and indexes | `sites-preview/d1.test.mjs`: "creates the schema and the read indexes in one script" |
+| D-07 the D1 store writes a tool and its data together | `d1.test.mjs`: "writes a tool and its data together, and rolls the pair back on failure" |
+| D-07 the D1 store prunes expired sessions | `d1.test.mjs`: "prunes an expired session when it creates a new one" |
+| PR-04 a backend call that does not answer times out | `apps/web/src/services/backendClient.test.ts`: "times out a call that does not answer" |
 
 ## Accounts, marketplace, requests and streaks (2026-11-04)
 

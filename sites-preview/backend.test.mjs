@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BACKEND_FIELDS,
+  MAX_BODY_CHARS,
   accountProblem,
   backendRoute,
   envelopeProblem,
@@ -35,11 +36,13 @@ function memoryStore() {
       const row = accounts.get(username);
       return row === undefined ? null : { ...row };
     },
-    async countAccounts() {
-      return accounts.size;
-    },
-    async createAccount({ username, role, password }) {
+    async createAccount({ username, password }) {
+      if (accounts.has(username)) {
+        return null;
+      }
+      const role = accounts.size === 0 ? "owner" : "viewer";
       accounts.set(username, { username, role, password });
+      return { username, role };
     },
     async setRole(username, role) {
       const row = accounts.get(username);
@@ -235,6 +238,76 @@ describe("PR-05 the backend never receives chats, prompts, cost, usage or a stre
 });
 
 describe("D-07 the optional backend holds accounts, roles, the marketplace and feature requests", () => {
+  it("refuses a body that is not JSON", async () => {
+    const request = new Request("https://keyrig.test/api/backend/account?mode=sign-up", {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify({ account: { username: "alice", password: "correct-horse" } }),
+    });
+
+    const response = await route(request, memoryStore());
+
+    expect(response.status).toBe(415);
+    expect((await response.json()).error.code).toBe("content_type");
+  });
+
+  it("refuses a body that declares more than the limit before it reads the body", async () => {
+    const request = new Request("https://keyrig.test/api/backend/account?mode=sign-up", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": String(MAX_BODY_CHARS + 1),
+      },
+      body: "{}",
+    });
+
+    const response = await route(request, memoryStore());
+
+    expect(response.status).toBe(413);
+    expect((await response.json()).error.code).toBe("body_too_large");
+  });
+
+  it("returns a safe error when the database store fails", async () => {
+    const response = await backendRoute(
+      get("/api/backend/tools"),
+      {
+        DB: {
+          prepare() {
+            throw new Error("d1 down for alice");
+          },
+        },
+      },
+      "/api/backend/tools",
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error.code).toBe("backend_unavailable");
+    expect(JSON.stringify(body)).not.toContain("d1 down");
+  });
+
+  it("makes exactly one owner when two first sign-ups overlap", async () => {
+    const store = memoryStore();
+    const [alice, bob] = await Promise.all([signedUp(store, "alice"), signedUp(store, "bob")]);
+    const roles = [(await alice.response.json()).account.role, (await bob.response.json()).account.role];
+
+    expect(roles.sort()).toEqual(["owner", "viewer"]);
+    expect([...store.accounts.values()].filter((row) => row.role === "owner")).toHaveLength(1);
+  });
+
+  it("returns 409 when the same name signs up twice at once", async () => {
+    const store = memoryStore();
+    const request = () =>
+      post(
+        "/api/backend/account?mode=sign-up",
+        { account: { username: "alice", password: "correct-horse" } },
+      );
+    const [first, second] = await Promise.all([route(request(), store), route(request(), store)]);
+
+    expect([first.status, second.status].sort()).toEqual([200, 409]);
+    expect(store.accounts.size).toBe(1);
+  });
+
   it("refuses every call when the site has no database", async () => {
     const response = await backendRoute(
       post("/api/backend/account?mode=sign-up", { account: { username: "alice", password: "correct-horse" } }),

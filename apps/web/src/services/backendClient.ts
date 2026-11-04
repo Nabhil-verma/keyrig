@@ -85,6 +85,12 @@ export function isSignedOut(error: unknown): boolean {
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+interface BackendClientOptions {
+  timeoutMs?: number;
+}
+
+const DEFAULT_TIMEOUT_MS = 15_000;
+
 function accountBody(username: string, password: string): { username: string; password: string } {
   if (holdsKey(password)) {
     throw new BackendError(
@@ -104,21 +110,31 @@ function accountBody(username: string, password: string): { username: string; pa
 
 export function createBackendClient(
   fetchImpl: FetchLike = (input, init) => fetch(input, init),
+  options: BackendClientOptions = {},
 ) {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
   const call = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
       response = await fetchImpl(path, {
         credentials: "same-origin",
         ...init,
+        signal: controller.signal,
         headers: { "content-type": "application/json", ...init.headers },
       });
     } catch {
       throw new BackendError(
         0,
-        "network_offline",
-        "keyrig cannot reach the backend. Check the network and try again.",
+        controller.signal.aborted ? "network_timeout" : "network_offline",
+        controller.signal.aborted
+          ? "The backend did not answer in time. Try again."
+          : "keyrig cannot reach the backend. Check the network and try again.",
       );
+    } finally {
+      clearTimeout(timer);
     }
 
     let body: unknown = null;

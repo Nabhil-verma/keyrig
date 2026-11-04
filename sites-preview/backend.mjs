@@ -403,6 +403,18 @@ function problem(status, code, message, headers = {}) {
 }
 
 async function readBody(request) {
+  const type = (request.headers.get("content-type") ?? "").toLowerCase();
+  if (!type.startsWith("application/json")) {
+    return {
+      refusal: problem(415, "content_type", "A backend request must use application/json."),
+    };
+  }
+  const declared = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > MAX_BODY_CHARS) {
+    return {
+      refusal: problem(413, "body_too_large", `The request is larger than ${MAX_BODY_CHARS} characters.`),
+    };
+  }
   let text;
   try {
     text = await request.text();
@@ -471,9 +483,11 @@ async function accountRoute(request, env, store, url) {
     if (existing !== null) {
       return problem(409, "account_exists", "That account is already on this site. Sign in instead.");
     }
-    const role = (await store.countAccounts()) === 0 ? "owner" : "viewer";
-    await store.createAccount({ username, role, password: await hashPassword(password) });
-    existing = await store.accountByName(username);
+    const created = await store.createAccount({ username, password: await hashPassword(password) });
+    if (created === null) {
+      return problem(409, "account_exists", "That account is already on this site. Sign in instead.");
+    }
+    existing = created;
   } else if (existing === null || !(await verifyPassword(password, existing.password))) {
     return problem(403, "account_refused", "That account name and password do not match.");
   }
@@ -753,6 +767,12 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS backend_request_meta (request_id TEXT PRIMARY KEY, status TEXT NOT NULL, status_reason TEXT NOT NULL, duplicate_of TEXT)",
   "CREATE TABLE IF NOT EXISTS backend_request_votes (username TEXT NOT NULL, request_id TEXT NOT NULL, up INTEGER NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (username, request_id))",
   "CREATE TABLE IF NOT EXISTS backend_votes (username TEXT NOT NULL, tool_id TEXT NOT NULL, up INTEGER NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (username, tool_id))",
+  "CREATE INDEX IF NOT EXISTS backend_accounts_created ON backend_accounts(created_at)",
+  "CREATE INDEX IF NOT EXISTS backend_sessions_expires ON backend_sessions(expires)",
+  "CREATE INDEX IF NOT EXISTS backend_tools_created ON backend_tools(created_at DESC)",
+  "CREATE INDEX IF NOT EXISTS backend_requests_created ON backend_requests(created_at DESC)",
+  "CREATE INDEX IF NOT EXISTS backend_request_votes_request ON backend_request_votes(request_id, up)",
+  "CREATE INDEX IF NOT EXISTS backend_votes_tool ON backend_votes(tool_id, up)",
 ];
 
 /** The D1 store. Every row below is one account, one tool, one request or one vote. */
@@ -761,9 +781,7 @@ export function d1Store(db) {
   const ensureSchema = () => {
     if (schema === undefined) {
       schema = (async () => {
-        for (const statement of SCHEMA) {
-          await db.prepare(statement).run();
-        }
+        await db.exec(SCHEMA.join(";\n"));
       })().catch((error) => {
         schema = undefined;
         throw error;
@@ -790,12 +808,10 @@ export function d1Store(db) {
   return {
     accountByName: (username) =>
       first("SELECT username, role, password FROM backend_accounts WHERE username = ?", username),
-    countAccounts: async () => Number((await first("SELECT COUNT(*) AS n FROM backend_accounts"))?.n ?? 0),
-    createAccount: ({ username, role, password }) =>
-      run(
-        "INSERT INTO backend_accounts (username, role, password, created_at) VALUES (?, ?, ?, ?)",
+    createAccount: ({ username, password }) =>
+      first(
+        "INSERT INTO backend_accounts (username, role, password, created_at) VALUES (?, CASE WHEN (SELECT COUNT(*) FROM backend_accounts) = 0 THEN 'owner' ELSE 'viewer' END, ?, ?) ON CONFLICT(username) DO NOTHING RETURNING username, role",
         username,
-        role,
         password,
         new Date().toISOString(),
       ),
@@ -803,8 +819,18 @@ export function d1Store(db) {
     ownerCount: async () =>
       Number((await first("SELECT COUNT(*) AS n FROM backend_accounts WHERE role = 'owner'"))?.n ?? 0),
     listAccounts: () => all("SELECT username, role FROM backend_accounts ORDER BY created_at ASC"),
-    createSession: ({ id, username, expires }) =>
-      run("INSERT INTO backend_sessions (id, username, expires) VALUES (?, ?, ?)", id, username, expires),
+    createSession: async ({ id, username, expires }) => {
+      await ensureSchema();
+      const now = Math.floor(Date.now() / 1000);
+      await db.batch([
+        db.prepare("DELETE FROM backend_sessions WHERE expires <= ?").bind(now),
+        db.prepare("INSERT INTO backend_sessions (id, username, expires) VALUES (?, ?, ?)").bind(
+          id,
+          username,
+          expires,
+        ),
+      ]);
+    },
     endSession: (id) => run("DELETE FROM backend_sessions WHERE id = ?", id),
     sessionOwner: async (id, now) =>
       (await first("SELECT username FROM backend_sessions WHERE id = ? AND expires > ?", id, now))?.username ??
@@ -815,37 +841,40 @@ export function d1Store(db) {
         limit,
       ),
     createTool: async ({ id, name, publisher, risk, description, createdAt, permissions, version, tags, definition }) => {
-      await run(
-        "INSERT INTO backend_tools (id, name, publisher, risk, description, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        id,
-        name,
-        publisher,
-        risk,
-        description,
-        createdAt,
-      );
-      await run(
-        "INSERT INTO backend_tool_data (tool_id, definition, permissions, version, tags) VALUES (?, ?, ?, ?, ?)",
-        id,
-        definition === null ? null : JSON.stringify(definition),
-        JSON.stringify(permissions ?? []),
-        version ?? 1,
-        JSON.stringify(tags ?? []),
-      );
+      await ensureSchema();
+      await db.batch([
+        db
+          .prepare(
+            "INSERT INTO backend_tools (id, name, publisher, risk, description, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+          )
+          .bind(id, name, publisher, risk, description, createdAt),
+        db
+          .prepare(
+            "INSERT INTO backend_tool_data (tool_id, definition, permissions, version, tags) VALUES (?, ?, ?, ?, ?)",
+          )
+          .bind(
+            id,
+            definition === null ? null : JSON.stringify(definition),
+            JSON.stringify(permissions ?? []),
+            version ?? 1,
+            JSON.stringify(tags ?? []),
+          ),
+      ]);
     },
     createRequest: async ({ id, username, title, detail, createdAt }) => {
-      await run(
-        "INSERT INTO backend_requests (id, username, title, detail, created_at) VALUES (?, ?, ?, ?, ?)",
-        id,
-        username,
-        title,
-        detail,
-        createdAt,
-      );
-      await run(
-        "INSERT INTO backend_request_meta (request_id, status, status_reason, duplicate_of) VALUES (?, 'open', '', NULL)",
-        id,
-      );
+      await ensureSchema();
+      await db.batch([
+        db
+          .prepare(
+            "INSERT INTO backend_requests (id, username, title, detail, created_at) VALUES (?, ?, ?, ?, ?)",
+          )
+          .bind(id, username, title, detail, createdAt),
+        db
+          .prepare(
+            "INSERT INTO backend_request_meta (request_id, status, status_reason, duplicate_of) VALUES (?, 'open', '', NULL)",
+          )
+          .bind(id),
+      ]);
     },
     listRequests: (limit, viewer) =>
       all(
@@ -899,5 +928,9 @@ export async function backendRoute(request, env, pathname) {
   if (env === undefined || env === null || env.DB === undefined || env.DB === null) {
     return problem(503, "no_database", NOT_SET_UP);
   }
-  return routeWithStore(request, env, pathname, d1Store(env.DB));
+  try {
+    return await routeWithStore(request, env, pathname, d1Store(env.DB));
+  } catch {
+    return problem(503, "backend_unavailable", "The shared backend is unavailable. Try again.");
+  }
 }

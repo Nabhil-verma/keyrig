@@ -112,6 +112,22 @@ describe("PR-04 a failed backend call is clear", () => {
 
     await expect(client.me()).rejects.toThrow(/cannot reach the backend/);
   });
+
+  it("times out a call that does not answer", async () => {
+    const client = createBackendClient(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        }),
+      { timeoutMs: 10 },
+    );
+
+    const failure = await client.me().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(BackendError);
+    expect((failure as BackendError).code).toBe("network_timeout");
+  });
 });
 
 describe("D-07 an owner changes a role through the account field", () => {

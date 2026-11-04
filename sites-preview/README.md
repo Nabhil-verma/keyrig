@@ -39,6 +39,25 @@ from the `_redirects` and `vercel.json` files, which are for Netlify, Cloudflare
 extension it returns `index.html` with status 200. That makes `/providers`, `/security` and `/app` work
 on a direct visit. A missing asset keeps its 404.
 
+`manifest.json` lists every local module that the Worker imports: `worker.mjs`, `hosted.mjs` and
+`backend.mjs`. `sites-preview/manifest.test.mjs` fails when an import is missing from that list.
+
+## Attach the database
+
+The backend stays off until the site has a D1 database bound to the Worker as `DB`.
+
+1. Create a D1 database for this site.
+2. Bind the database to the Worker with the variable name `DB`.
+3. Deploy the Worker with the binding.
+4. Check the attachment:
+
+   ```bash
+   curl -i https://<site>/api/backend/tools
+   ```
+
+   `503` with `no_database` means the binding is missing. `200` with `{"tools":[]}` means the store is
+   attached and the schema is ready.
+
 ## The optional backend
 
 `/api/backend/*` holds accounts, roles, the marketplace and feature requests (D-07). It is off until the
@@ -60,9 +79,12 @@ The password row holds a PBKDF2-SHA-256 salt and hash with 100,000 iterations. T
 cookie from `hosted.mjs` under the name `keyrig_backend`. `BACKEND_SESSION_SALT` is optional: it falls
 back to `HOSTED_IP_SALT`, then to `keyrig`.
 
-The rows live in `backend_accounts`, `backend_sessions`, `backend_tools`, `backend_requests` and
-`backend_votes`, which the Worker creates on the first call. There is no key, chat, prompt, cost, usage or
-streak table (PR-05). See [../docs/SECURITY.md](../docs/SECURITY.md).
+The rows live in `backend_accounts`, `backend_sessions`, `backend_tools`, `backend_tool_data`,
+`backend_requests`, `backend_request_meta`, `backend_request_votes` and `backend_votes`. The Worker
+creates the tables and their read indexes on the first call. A tool and its data, or a request and its
+metadata, are written in one batch, so a partial row cannot remain after a failed write. Expired sessions
+are removed when a new session is created. There is no key, chat, prompt, cost, usage or streak table
+(PR-05). See [../docs/SECURITY.md](../docs/SECURITY.md).
 
 ## The hosted model
 
