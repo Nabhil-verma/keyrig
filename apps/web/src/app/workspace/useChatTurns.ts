@@ -40,6 +40,45 @@ const NOTHING_TO_TRIM_ERROR: KeyrigErrorJSON = {
   details: {},
 };
 
+/** Patch one message without copying the rest of the list. */
+function patchMessage(
+  setMessages: Dispatch<SetStateAction<UIMessage[]>>,
+  id: string,
+  patch: (message: UIMessage) => UIMessage,
+): void {
+  setMessages((current) => current.map((message) => (message.id === id ? patch(message) : message)));
+}
+
+/** One delta buffer for an answer, so both turn types stream the same way. */
+function createAssistantBuffer(
+  assistantId: string,
+  setMessages: Dispatch<SetStateAction<UIMessage[]>>,
+): DeltaBuffer {
+  return createDeltaBuffer(
+    (text) => patchMessage(setMessages, assistantId, (message) => ({ ...message, content: message.content + text })),
+    (callback) => {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(callback);
+      } else {
+        setTimeout(callback, 16);
+      }
+    },
+  );
+}
+
+/** The repository of the tool context, or empty fields when none is set. */
+function githubTarget(connections: AccountConnections | null): { owner: string; repo: string } {
+  if (connections === null || connections.githubRepo.length === 0) {
+    return { owner: "", repo: "" };
+  }
+  try {
+    const parsed = parseRepo(connections.githubRepo);
+    return { owner: parsed.owner, repo: parsed.repo };
+  } catch {
+    return { owner: "", repo: "" };
+  }
+}
+
 interface UseChatTurnsOptions {
   session: SignedInAccount | null;
   needsKey: boolean;
@@ -121,22 +160,7 @@ export function useChatTurns(options: UseChatTurnsOptions) {
       abortRef.current = controller;
       setStreaming(true);
       // PV-08: join the deltas and render once for each frame.
-      const buffer: DeltaBuffer = createDeltaBuffer(
-        (text) => {
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantId ? { ...message, content: message.content + text } : message,
-            ),
-          );
-        },
-        (callback) => {
-          if (typeof requestAnimationFrame === "function") {
-            requestAnimationFrame(callback);
-          } else {
-            setTimeout(callback, 16);
-          }
-        },
-      );
+      const buffer = createAssistantBuffer(assistantId, setMessages);
       try {
         const outcome = await sendChat({
           vault: session.vault,
@@ -156,28 +180,22 @@ export function useChatTurns(options: UseChatTurnsOptions) {
         // The full text replaces the streamed text, so a late flush must not run.
         buffer.clear();
         triedKeys.current.delete(assistantId);
-        setMessages((current) =>
-          current.map((message) =>
-            message.id === assistantId
-              ? {
-                  ...message,
-                  content: outcome.result.text,
-                  model: modelId,
-                  providerId,
-                  keyLabel: outcome.key?.label ?? "No key",
-                  costUsd: outcome.cost.usd,
-                  pricingKnown: outcome.cost.pricingKnown,
-                  inputTokens: outcome.result.usage.inputTokens,
-                  outputTokens: outcome.result.usage.outputTokens,
-                  ...(outcome.result.usage.cachedTokens !== undefined
-                    ? { cachedTokens: outcome.result.usage.cachedTokens }
-                    : {}),
-                  cacheState: outcome.cacheState,
-                  stopReason: outcome.result.stopReason,
-                }
-              : message,
-          ),
-        );
+        patchMessage(setMessages, assistantId, (message) => ({
+          ...message,
+          content: outcome.result.text,
+          model: modelId,
+          providerId,
+          keyLabel: outcome.key?.label ?? "No key",
+          costUsd: outcome.cost.usd,
+          pricingKnown: outcome.cost.pricingKnown,
+          inputTokens: outcome.result.usage.inputTokens,
+          outputTokens: outcome.result.usage.outputTokens,
+          ...(outcome.result.usage.cachedTokens !== undefined
+            ? { cachedTokens: outcome.result.usage.cachedTokens }
+            : {}),
+          cacheState: outcome.cacheState,
+          stopReason: outcome.result.stopReason,
+        }));
       } catch (caught) {
         // Keep the text that arrived before the failure (PV-08).
         buffer.flush();
@@ -188,9 +206,7 @@ export function useChatTurns(options: UseChatTurnsOptions) {
         }
         const otherKey = keys.some((item) => !tried.has(item.id));
         const error = withOtherKeyAction(safeError(caught), otherKey);
-        setMessages((current) =>
-          current.map((message) => (message.id === assistantId ? { ...message, error } : message)),
-        );
+        patchMessage(setMessages, assistantId, (message) => ({ ...message, error }));
       } finally {
         setStreaming(false);
         abortRef.current = null;
@@ -226,40 +242,14 @@ export function useChatTurns(options: UseChatTurnsOptions) {
       const controller = new AbortController();
       abortRef.current = controller;
       setStreaming(true);
-      const buffer: DeltaBuffer = createDeltaBuffer(
-        (text) => {
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantId ? { ...message, content: message.content + text } : message,
-            ),
-          );
-        },
-        (callback) => {
-          if (typeof requestAnimationFrame === "function") {
-            requestAnimationFrame(callback);
-          } else {
-            setTimeout(callback, 16);
-          }
-        },
-      );
+      const buffer = createAssistantBuffer(assistantId, setMessages);
 
       let spent = 0;
       let pricingKnown = true;
       let inputTokens = 0;
       let outputTokens = 0;
       let keyLabel = selectedKey?.label ?? "No key";
-      let owner = "";
-      let repo = "";
-      if (connections !== null && connections.githubRepo.length > 0) {
-        try {
-          const parsed = parseRepo(connections.githubRepo);
-          owner = parsed.owner;
-          repo = parsed.repo;
-        } catch {
-          owner = "";
-          repo = "";
-        }
-      }
+      const { owner, repo } = githubTarget(connections);
 
       try {
         const result = await runToolTurn({
@@ -304,52 +294,36 @@ export function useChatTurns(options: UseChatTurnsOptions) {
             branch: connections?.githubBranch ?? "main",
             allowCommit: connections?.commitPermit === true,
           },
-          onScene: (next) =>
-            setMessages((current) =>
-              current.map((message) => (message.id === assistantId ? { ...message, scene: next } : message)),
-            ),
+          onScene: (next) => patchMessage(setMessages, assistantId, (message) => ({ ...message, scene: next })),
           onEvent: (event) => {
-            setMessages((current) =>
-              current.map((message) => {
-                if (message.id !== assistantId) {
-                  return message;
-                }
-                const tools = message.tools ?? [];
-                const index = tools.findIndex((item) => item.id === event.id);
-                const nextTools =
-                  index === -1 ? [...tools, event] : tools.map((item, at) => (at === index ? event : item));
-                return { ...message, tools: nextTools };
-              }),
-            );
+            patchMessage(setMessages, assistantId, (message) => {
+              const tools = message.tools ?? [];
+              const index = tools.findIndex((item) => item.id === event.id);
+              const nextTools =
+                index === -1 ? [...tools, event] : tools.map((item, at) => (at === index ? event : item));
+              return { ...message, tools: nextTools };
+            });
             refreshFiles();
           },
         });
 
         buffer.clear();
-        setMessages((current) =>
-          current.map((message) =>
-            message.id === assistantId
-              ? {
-                  ...message,
-                  content: result.text,
-                  model: modelId,
-                  providerId,
-                  keyLabel,
-                  costUsd: spent,
-                  pricingKnown,
-                  inputTokens,
-                  outputTokens,
-                  stopReason: result.hitLimit ? "limit" : "complete",
-                }
-              : message,
-          ),
-        );
+        patchMessage(setMessages, assistantId, (message) => ({
+          ...message,
+          content: result.text,
+          model: modelId,
+          providerId,
+          keyLabel,
+          costUsd: spent,
+          pricingKnown,
+          inputTokens,
+          outputTokens,
+          stopReason: result.hitLimit ? "limit" : "complete",
+        }));
       } catch (caught) {
         buffer.flush();
         const error = safeError(caught);
-        setMessages((current) =>
-          current.map((message) => (message.id === assistantId ? { ...message, error } : message)),
-        );
+        patchMessage(setMessages, assistantId, (message) => ({ ...message, error }));
       } finally {
         setStreaming(false);
         abortRef.current = null;

@@ -188,6 +188,7 @@ export function Dashboard({
   const streak = streakSummary(loaded?.streak ?? readStreak(browserStorage()));
   const toolsOn = agentSettings.enabled && agentSettings.acknowledgedVersion > 0;
   const greeting = greetingName(displayName, username);
+  const weekMax = Math.max(...week.days.map((entry) => entry.usd), 0.0001);
 
   const quick = (id: string): void => {
     if (id === "new") {
@@ -385,19 +386,16 @@ export function Dashboard({
             <span className="dash-cost-note">estimated</span>
           </div>
           <ol className="dash-bars" aria-label="Cost by day">
-            {week.days.map((day) => {
-              const max = Math.max(...week.days.map((entry) => entry.usd), 0.0001);
-              return (
-                <li key={day.day}>
-                  <span
-                    className="dash-bar"
-                    style={{ height: `${Math.max(4, Math.round((day.usd / max) * 100))}%` }}
-                    title={`${day.day}: ${formatUsd(day.usd)}`}
-                  />
-                  <small>{day.day.slice(8)}</small>
-                </li>
-              );
-            })}
+            {week.days.map((day) => (
+              <li key={day.day}>
+                <span
+                  className="dash-bar"
+                  style={{ height: `${Math.max(4, Math.round((day.usd / weekMax) * 100))}%` }}
+                  title={`${day.day}: ${formatUsd(day.usd)}`}
+                />
+                <small>{day.day.slice(8)}</small>
+              </li>
+            ))}
           </ol>
         </DashboardCard>
       </div>

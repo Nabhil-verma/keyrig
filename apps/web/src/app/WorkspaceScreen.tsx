@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AccountRecord, AgentApprovalRequest, KeyView, RoleAssignment, RoleId, SignedInAccount, UsageEvent } from "@keyrig/core";
+import { useCallback, useMemo, useRef, useState } from "react";
+import type {
+  AccountRecord,
+  AgentApprovalRequest,
+  KeyView,
+  RoleAssignment,
+  RoleId,
+  SignedInAccount,
+} from "@keyrig/core";
 import {
   accountStorage,
   assignRole,
@@ -7,26 +14,14 @@ import {
   budgetState,
   buildSystemPrompt,
   can,
-  createUsageBus,
   ensureAccountRole,
   importVault,
   listAccounts,
-  loadProviderModels,
   readAssignments,
   signIn,
   signUp,
 } from "@keyrig/core";
-import {
-  BUILTIN_MANIFESTS,
-  checkBaseUrl,
-  findModel,
-  getManifest,
-  loadCatalog,
-  modelsForProvider,
-  type Catalog,
-  type CatalogSource,
-  type ProviderManifest,
-} from "@keyrig/providers";
+import { BUILTIN_MANIFESTS } from "@keyrig/providers";
 import { ArenaPanel } from "../components/ArenaPanel";
 import { ChatPanel } from "../components/ChatPanel";
 import { Dashboard } from "./workspace/Dashboard";
@@ -38,40 +33,31 @@ import { Inspector, type InspectTab } from "./workspace/Inspector";
 import { RoutePopover } from "./workspace/RoutePopover";
 import { SignedOutStage } from "./workspace/SignedOutStage";
 import { ThreadRail } from "./workspace/ThreadRail";
+import { UndoDeleteBar } from "./workspace/UndoDeleteBar";
 import { WorkspaceHeader } from "./workspace/WorkspaceHeader";
 import { readConnections, type AccountConnections } from "../stores/connections";
-import { readRoute, writeRoute } from "../stores/routeStore";
 import { useSettings, writeSettings } from "../stores/settings";
-import { addSpend, readSpend, readSpendHistory, utcDay } from "../stores/spendStore";
-import { recordActivity } from "../lib/streak";
-import { browserStorage } from "../lib/storage";
 import {
   atMessageCap,
   atThreadCap,
-  createThread,
   MAX_THREADS,
   MAX_THREADS_MESSAGES,
-  readThreads,
-  removeThread as removeThreadFromList,
-  restoreThread,
   threadPreview,
-  titleFrom,
-  upsertThread,
-  writeThreads,
-  type StoredThread,
 } from "../stores/threads";
 import { activeTools, useAgentSettings } from "../stores/toolSettings";
-import { newId, type ArenaResult, type ArenaRun, type UIMessage } from "../lib/types";
+import { newId, type ArenaResult } from "../lib/types";
 import { downloadText, fileSafeName, threadToMarkdown } from "../lib/threadExport";
 import { threadReceiptSvg } from "../lib/receipt";
 import { Icon } from "../components/ui/Icon";
 import { Workspace, type WorkspaceFile } from "../stores/workspace";
+import { browserStorage } from "../lib/storage";
 import { safeError } from "./workspace/chatTurnHelpers";
+import { useChatRoute } from "./workspace/useChatRoute";
+import { useChatThreads } from "./workspace/useChatThreads";
 import { useChatTurns } from "./workspace/useChatTurns";
+import { useSpendTracking } from "./workspace/useSpendTracking";
 
 const storage = browserStorage();
-/** The window for undoing a deleted chat. */
-const UNDO_DELETE_MS = 8_000;
 
 /** The last message that matches, so the chat shows its newest facts. */
 function lastWhere<T>(items: readonly T[], test: (item: T) => boolean): T | undefined {
@@ -94,110 +80,112 @@ export default function App() {
 
   const [session, setSession] = useState<SignedInAccount | null>(null);
   const [keys, setKeys] = useState<KeyView[]>([]);
-  const [catalog, setCatalog] = useState<Catalog | null>(null);
-  const [catalogSource, setCatalogSource] = useState<CatalogSource | null>(null);
-  const [catalogWarning, setCatalogWarning] = useState<string | null>(null);
-  const [providerId, setProviderId] = useState("openai");
-  const [modelId, setModelId] = useState("gpt-5.4");
-  const [keyId, setKeyId] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
-  const [view, setView] = useState<"home" | "chat" | "arena">("home");
-  const [messages, setMessages] = useState<UIMessage[]>([]);
-  const [streaming, setStreaming] = useState(false);
-  const [totalCost, setTotalCost] = useState(0);
-  /** CO-02: the spend for the UTC day, kept on this device. */
-  const [spentToday, setSpentToday] = useState(0);
-  /** CO-02: the last days, for the inspector. */
-  const [spendDays, setSpendDays] = useState(() => readSpendHistory(storage));
-  /** CO-04: the last requests of this session. */
-  const [usage, setUsage] = useState<UsageEvent[]>([]);
-  /** UX-01: the arena run of the open chat. A reload keeps it. */
-  const [arenaRun, setArenaRun] = useState<ArenaRun | null>(null);
-  /** A user choice to pass the daily limit for this session only. */
-  const [overBudget, setOverBudget] = useState(false);
   const [role, setRole] = useState<RoleId | null>(null);
   const [accounts, setAccounts] = useState<AccountRecord[]>([]);
   const [assignments, setAssignments] = useState<RoleAssignment[]>([]);
   const [roleError, setRoleError] = useState<string | null>(null);
-  const [providerModels, setProviderModels] = useState<string[]>([]);
-  const [modelsBusy, setModelsBusy] = useState(false);
-  const [modelsError, setModelsError] = useState<string | null>(null);
-  const [modelsNonce, setModelsNonce] = useState(0);
-  /** AS-01: the agent settings of this device. */
-  const agentSettings = useAgentSettings();
   const [connections, setConnections] = useState<AccountConnections | null>(null);
   const [approval, setApproval] = useState<AgentApprovalRequest | null>(null);
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
-  const [threads, setThreads] = useState<StoredThread[]>([]);
-  const [activeId, setActiveId] = useState("");
+  const [view, setView] = useState<"home" | "chat" | "arena">("home");
+  const [streaming, setStreaming] = useState(false);
+  const [overBudget, setOverBudget] = useState(false);
   const [search, setSearch] = useState("");
   const [shelf, setShelf] = useState<{ open: boolean; tab: ShelfTab }>({ open: false, tab: "keys" });
   const [routeOpen, setRouteOpen] = useState(false);
   const [inspect, setInspect] = useState<InspectTab>("outbound");
-  /** UX-05: the last deleted chat, kept for a moment so a stray click is reversible. */
-  const [undoDelete, setUndoDelete] = useState<StoredThread | null>(null);
+  const agentSettings = useAgentSettings();
 
-  const bus = useMemo(() => createUsageBus(), []);
   const abortRef = useRef<AbortController | null>(null);
   const approvalRef = useRef<((decision: "approve" | "deny") => void) | null>(null);
-  const threadsRef = useRef<StoredThread[]>([]);
-  const undoTimerRef = useRef<number | null>(null);
+
+  const accountStore = useMemo(
+    () => (session === null ? null : accountStorage(storage, session.username)),
+    [session],
+  );
   /** AS-05: one workspace for the signed-in account. */
   const workspace = useMemo(
-    () => (session === null ? null : new Workspace({ storage: accountStorage(storage, session.username) })),
-    [session],
+    () => (accountStore === null ? null : new Workspace({ storage: accountStore })),
+    [accountStore],
   );
   const refreshFiles = useCallback(() => {
     setFiles(workspace === null ? [] : workspace.files());
   }, [workspace]);
 
-  /** Move the route to another manifest and clear the facts of the old provider. */
-  const applyManifest = useCallback((next: ProviderManifest | undefined): void => {
-    setModelId(next?.defaultModel ?? "");
-    setBaseUrl(next?.supportsCustomBaseUrl ? next.baseUrl : "");
-    setProviderModels([]);
-    setModelsError(null);
-  }, []);
+  const spend = useSpendTracking(storage);
+  const {
+    catalog,
+    catalogSource,
+    catalogWarning,
+    providerId,
+    modelId,
+    setModelId,
+    keyId,
+    setKeyId,
+    baseUrl,
+    setBaseUrl,
+    manifest,
+    needsKey,
+    models,
+    catalogModel,
+    pricing,
+    providerKeys,
+    selectedKey,
+    providerModels,
+    modelsBusy,
+    modelsError,
+    baseUrlCheck,
+    customBaseBlocked,
+    effectiveBaseUrl,
+    restoreRoute,
+    changeProvider,
+    reloadModels,
+  } = useChatRoute({
+    storage,
+    username: session?.username ?? null,
+    session,
+    keys,
+    role,
+    manifests: enabledManifests,
+    rememberRoute: settings.rememberRoute,
+  });
 
-  useEffect(() => {
-    threadsRef.current = threads;
-  }, [threads]);
+  const abortTurn = (): void => {
+    abortRef.current?.abort();
+  };
+  const leaveThread = (): void => {
+    abortRef.current?.abort();
+    approvalRef.current?.("deny");
+    approvalRef.current = null;
+    setApproval(null);
+  };
 
-  useEffect(() => {
-    let active = true;
-    void loadCatalog({ storage }).then((result) => {
-      if (!active) {
-        return;
-      }
-      setCatalog(result.catalog);
-      setCatalogSource(result.source);
-      setCatalogWarning(result.warning ?? null);
-    });
-    // CO-02: the day opens from the stored total, so a reload keeps the budget.
-    setSpentToday(readSpend(storage, utcDay()));
-    setSpendDays(readSpendHistory(storage));
-    const unsubscribe = bus.subscribe((event) => {
-      setTotalCost((value) => value + event.costUsd);
-      recordActivity(storage);
-      setSpentToday(addSpend(storage, event.costUsd));
-      setSpendDays(readSpendHistory(storage));
-      setUsage((current) => [...current, event].slice(-20));
-    });
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, [bus]);
+  const {
+    threads,
+    activeId,
+    activeThread,
+    messages,
+    setMessages,
+    arenaRun,
+    setArenaRun,
+    pendingUndo,
+    loadAccount,
+    clear: clearThreads,
+    openThread,
+    newChat,
+    deleteThread,
+    undoLastDelete,
+    dismissUndo,
+    threadForExport,
+  } = useChatThreads({
+    storage,
+    username: session?.username ?? null,
+    canDelete: !streaming,
+    onAbortTurn: abortTurn,
+    onLeaveThread: leaveThread,
+    onShowChat: () => setView("chat"),
+  });
 
-  const manifest = (getManifest(enabledManifests, providerId) ?? enabledManifests[0]) as ProviderManifest;
-  /** The hosted model needs no key, because keyrig pays. Every other provider does. */
-  const needsKey = manifest.authType !== "none";
-  const models = useMemo(() => (catalog ? modelsForProvider(catalog, providerId) : []), [catalog, providerId]);
-  const catalogModel = useMemo(
-    () => (catalog ? findModel(catalog, providerId, modelId) : undefined),
-    [catalog, providerId, modelId],
-  );
-  const pricing = catalogModel?.pricing;
   /** AS-06: one guard prompt for every request of this session. */
   const systemPromptText = useMemo(
     () => buildSystemPrompt({ instructions: settings.instructions, tools: true }),
@@ -207,12 +195,10 @@ export default function App() {
   const activeToolNames = activeTools(agentSettings);
   const toolsReady =
     activeToolNames.length > 0 && manifest.abilities.tools && manifest.wireFormat === "openai-chat";
+
   /** CO-02: the day budget, the warning and the stop. */
-  const budget = budgetState(spentToday, settings.dailyBudgetUsd);
+  const budget = budgetState(spend.spentToday, settings.dailyBudgetUsd);
   const budgetStop = budget.level === "blocked" && !overBudget;
-  const providerKeys = keys.filter((key) => key.providerId === providerId);
-  const selectedKey = keys.find((key) => key.id === keyId);
-  const activeThread = threads.find((thread) => thread.id === activeId);
   const theme = settings.theme === "light" ? "light" : "dark";
 
   const filteredThreads = useMemo(() => {
@@ -242,126 +228,6 @@ export default function App() {
     );
     return (message?.inputTokens ?? 0) + (message?.outputTokens ?? 0);
   }, [messages]);
-
-  useEffect(() => {
-    const available = keys.filter((key) => key.providerId === providerId);
-    if (!available.some((key) => key.id === keyId)) {
-      setKeyId(available[0]?.id ?? "");
-    }
-  }, [keys, providerId, keyId]);
-
-  /** A plugin can be disabled while its provider is selected. Move to the first pack. */
-  useEffect(() => {
-    if (enabledManifests.some((item) => item.id === providerId)) {
-      return;
-    }
-    const first = enabledManifests[0];
-    if (first === undefined) {
-      return;
-    }
-    setProviderId(first.id);
-    applyManifest(first);
-  }, [enabledManifests, providerId, applyManifest]);
-
-  const baseUrlCheck =
-    manifest.supportsCustomBaseUrl && baseUrl.trim().length > 0 ? checkBaseUrl(baseUrl.trim()) : null;
-  const customBaseBlocked = baseUrlCheck !== null && !baseUrlCheck.allowed;
-  const effectiveBaseUrl = manifest.supportsCustomBaseUrl && baseUrl.trim().length > 0 ? baseUrl.trim() : undefined;
-
-  /**
-   * PV-11: read the model list when the manifest allows one. The picker shows
-   * the list after this request. A provider that does not list its models
-   * keeps the typed model name.
-   */
-  useEffect(() => {
-    const canList = session !== null && can(role, "route.manage") && manifest.abilities.modelList;
-    const hasKey = manifest.authType !== "api-key" || providerKeys.length > 0;
-    if (!canList || !hasKey) {
-      setProviderModels([]);
-      setModelsBusy(false);
-      setModelsError(null);
-      return;
-    }
-
-    const controller = new AbortController();
-    let active = true;
-    setProviderModels([]);
-    setModelsBusy(true);
-    setModelsError(null);
-
-    // Wait for a short pause. Each keystroke in the base URL must not start a request.
-    const timer = setTimeout(() => {
-      void loadProviderModels({
-        vault: session.vault,
-        manifest,
-        ...(keyId.length > 0 ? { keyId } : {}),
-        ...(effectiveBaseUrl !== undefined ? { baseUrl: effectiveBaseUrl } : {}),
-        signal: controller.signal,
-      })
-        .then((result) => {
-          if (!active) {
-            return;
-          }
-          setProviderModels(result.models);
-          setModelsError(result.models.length === 0 ? "The provider sent no model names. Type the model name." : null);
-        })
-        .catch((caught: unknown) => {
-          if (!active) {
-            return;
-          }
-          setProviderModels([]);
-          setModelsError(safeError(caught).message);
-        })
-        .finally(() => {
-          if (active) {
-            setModelsBusy(false);
-          }
-        });
-    }, 300);
-
-    return () => {
-      active = false;
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [session, manifest, keyId, effectiveBaseUrl, providerKeys.length, role, modelsNonce]);
-
-  /** The chat record follows the messages of the open thread. */
-  useEffect(() => {
-    if (session === null || activeId.length === 0) {
-      return;
-    }
-    const timer = setTimeout(() => {
-      const current = threadsRef.current.find((thread) => thread.id === activeId);
-      const firstUser = messages.find((message) => message.role === "user");
-      const title =
-        current !== undefined && current.title !== "New chat"
-          ? current.title
-          : firstUser !== undefined
-            ? titleFrom(firstUser.display ?? firstUser.content)
-            : "New chat";
-      const now = new Date().toISOString();
-      const next = upsertThread(threadsRef.current, {
-        id: activeId,
-        title,
-        createdAt: current?.createdAt ?? now,
-        updatedAt: now,
-        messages,
-        ...(arenaRun !== null ? { arena: arenaRun } : {}),
-      });
-      writeThreads(accountStorage(storage, session.username), next);
-      setThreads(next);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [messages, activeId, session, arenaRun]);
-
-  /** Keep the route for this account. The write is best effort. */
-  useEffect(() => {
-    if (session === null || !settings.rememberRoute) {
-      return;
-    }
-    writeRoute(storage, session.username, { providerId, modelId, keyId, baseUrl });
-  }, [session, providerId, modelId, keyId, baseUrl, settings.rememberRoute]);
 
   const blockReason = ((): string | null => {
     if (session === null) {
@@ -406,7 +272,7 @@ export default function App() {
     pricing,
     effectiveBaseUrl,
     catalog,
-    bus,
+    bus: spend.bus,
     systemPromptText,
     workspace,
     connections,
@@ -454,138 +320,9 @@ export default function App() {
     setView("chat");
   };
 
-  const changeProvider = (next: string): void => {
-    setProviderId(next);
-    applyManifest(getManifest(enabledManifests, next));
-  };
-
-  /** PV-11: read the model list again with the selected key. */
-  const reloadModels = (): void => {
-    setModelsNonce((value) => value + 1);
-  };
-
-  const persistThreads = (next: StoredThread[]): void => {
-    setThreads(next);
-    threadsRef.current = next;
-    if (session !== null) {
-      writeThreads(accountStorage(storage, session.username), next);
-    }
-  };
-
-  /** Drop the pending undo, if there is one. */
-  const clearUndo = useCallback((): void => {
-    if (undoTimerRef.current !== null) {
-      window.clearTimeout(undoTimerRef.current);
-      undoTimerRef.current = null;
-    }
-    setUndoDelete(null);
-  }, []);
-
-  /** Hold a deleted chat for a few seconds. A second delete replaces the first. */
-  const armUndo = useCallback((thread: StoredThread): void => {
-    if (undoTimerRef.current !== null) {
-      window.clearTimeout(undoTimerRef.current);
-    }
-    setUndoDelete(thread);
-    undoTimerRef.current = window.setTimeout(() => {
-      undoTimerRef.current = null;
-      setUndoDelete(null);
-    }, UNDO_DELETE_MS);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (undoTimerRef.current !== null) {
-        window.clearTimeout(undoTimerRef.current);
-      }
-    },
-    [],
-  );
-
-  const undoLastDelete = (): void => {
-    if (undoDelete === null) {
-      return;
-    }
-    const restored = undoDelete;
-    clearUndo();
-    persistThreads(restoreThread(threadsRef.current, restored));
-  };
-
-  const openThread = (thread: StoredThread): void => {
-    abortRef.current?.abort();
-    approvalRef.current?.("deny");
-    approvalRef.current = null;
-    setApproval(null);
-    setActiveId(thread.id);
-    setMessages(thread.messages);
-    setArenaRun(thread.arena ?? null);
-    setView("chat");
-  };
-
-  const newChat = (): void => {
-    abortRef.current?.abort();
-    const current = threadsRef.current.find((thread) => thread.id === activeId);
-    if (current !== undefined && current.messages.length === 0) {
-      setMessages([]);
-      setView("chat");
-      return;
-    }
-    if (
-      atThreadCap(threadsRef.current) &&
-      !window.confirm(
-        `This device keeps ${MAX_THREADS} chats. A new chat removes the oldest one. Continue?`,
-      )
-    ) {
-      return;
-    }
-    const thread = createThread();
-    persistThreads(upsertThread(threadsRef.current, thread));
-    setActiveId(thread.id);
-    setMessages([]);
-    setArenaRun(null);
-    setView("chat");
-  };
-
-  const deleteThread = (id: string): void => {
-    if (streaming) {
-      return;
-    }
-    const deleted = threadsRef.current.find((thread) => thread.id === id);
-    const next = removeThreadFromList(threadsRef.current, id);
-    persistThreads(next);
-    if (deleted !== undefined) {
-      armUndo(deleted);
-    }
-    if (id !== activeId) {
-      return;
-    }
-    const fallback = next[0];
-    if (fallback === undefined) {
-      const fresh = createThread();
-      persistThreads(upsertThread(next, fresh));
-      setActiveId(fresh.id);
-      setMessages([]);
-      return;
-    }
-    setActiveId(fallback.id);
-    setMessages(fallback.messages);
-    setArenaRun(fallback.arena ?? null);
-  };
-
   const enterSession = (account: SignedInAccount): void => {
     const deviceKeys = account.vault.listKeys();
-    const saved = readRoute(storage, account.username);
-    const savedManifest = saved ? getManifest(enabledManifests, saved.providerId) : undefined;
-    const savedKey = saved ? deviceKeys.find((key) => key.id === saved.keyId) : undefined;
-    const firstManifest = enabledManifests[0];
-
-    const accountStore = accountStorage(storage, account.username);
-    const savedThreads = readThreads(accountStore);
-    const firstThread = savedThreads[0] ?? createThread();
-    const threadList = savedThreads.length > 0 ? savedThreads : [firstThread];
-    if (savedThreads.length === 0) {
-      writeThreads(accountStore, threadList);
-    }
+    const store = accountStorage(storage, account.username);
 
     setSession(account);
     setKeys(deviceKeys);
@@ -593,34 +330,14 @@ export default function App() {
     setAccounts(listAccounts(storage));
     setAssignments(readAssignments({ storage }));
     setRoleError(null);
-    setThreads(threadList);
-    threadsRef.current = threadList;
-    setActiveId(firstThread.id);
-    setMessages(firstThread.messages);
-    setArenaRun(firstThread.arena ?? null);
-    setTotalCost(0);
+    loadAccount(account.username);
+    restoreRoute(account.username, deviceKeys);
+    spend.beginSession();
     setOverBudget(false);
-    setSpentToday(readSpend(storage, utcDay()));
     setView("home");
-    setProviderModels([]);
-    setModelsError(null);
-    setConnections(readConnections(accountStore));
+    setConnections(readConnections(store));
     setApproval(null);
-    setFiles(new Workspace({ storage: accountStore }).files());
-
-    // A new chat opens with the route that the account used last.
-    if (saved !== null && savedManifest !== undefined && savedKey !== undefined) {
-      setProviderId(savedManifest.id);
-      setModelId(saved.modelId);
-      setKeyId(savedKey.id);
-      setBaseUrl(savedManifest.supportsCustomBaseUrl ? saved.baseUrl : "");
-      return;
-    }
-
-    setProviderId(firstManifest?.id ?? "openai");
-    setModelId(firstManifest?.defaultModel ?? "");
-    setKeyId(deviceKeys.find((key) => key.providerId === firstManifest?.id)?.id ?? "");
-    setBaseUrl(firstManifest?.supportsCustomBaseUrl ? firstManifest.baseUrl : "");
+    setFiles(new Workspace({ storage: store }).files());
   };
 
   const handleSignUp = async (username: string, password: string): Promise<void> => {
@@ -642,31 +359,22 @@ export default function App() {
   /** Sign-out locks the vault, drops the decrypted keys from memory and stops any stream. */
   const signOut = (): void => {
     abortRef.current?.abort();
-    clearUndo();
     session?.vault.lock();
     setSession(null);
     setKeys([]);
-    setProviderModels([]);
-    setModelsError(null);
     setRole(null);
     setAccounts([]);
     setAssignments([]);
     setRoleError(null);
     setShelf({ open: false, tab: "keys" });
-    setMessages([]);
-    setThreads([]);
-    setActiveId("");
-    threadsRef.current = [];
-    setTotalCost(0);
+    clearThreads();
     setOverBudget(false);
     setKeyId("");
     setConnections(null);
     setApproval(null);
     setFiles([]);
     setRouteOpen(false);
-    setArenaRun(null);
-    setUsage([]);
-    setSpendDays(readSpendHistory(storage));
+    spend.endSession();
   };
 
   /** AC-04: only an account with the roles.assign key changes a role. */
@@ -680,31 +388,6 @@ export default function App() {
     } catch (caught) {
       setRoleError(safeError(caught).message);
     }
-  };
-
-  /**
-   * The open chat with its live messages. The saved record waits 400 ms, so an
-   * export must read the screen instead of the record.
-   */
-  const threadForExport = (): StoredThread | null => {
-    if (messages.length === 0) {
-      return null;
-    }
-    const stored = threadsRef.current.find((item) => item.id === activeId);
-    const firstUser = messages.find((message) => message.role === "user");
-    const title =
-      stored !== undefined && stored.title !== "New chat"
-        ? stored.title
-        : firstUser !== undefined
-          ? titleFrom(firstUser.display ?? firstUser.content)
-          : "New chat";
-    return {
-      id: activeId,
-      title,
-      createdAt: stored?.createdAt ?? new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      messages,
-    };
   };
 
   /** Item 7: one chat leaves as a file. The file holds no key secret. */
@@ -735,7 +418,7 @@ export default function App() {
         username={session.username}
         view={view}
         onView={setView}
-        totalCost={totalCost}
+        totalCost={spend.totalCost}
         theme={theme}
         canExport={messages.length > 0}
         onExport={exportThread}
@@ -771,7 +454,7 @@ export default function App() {
               keys={keys}
               agentSettings={agentSettings}
               threads={threads}
-              spendDays={spendDays}
+              spendDays={spend.spendDays}
               onNewChat={newChat}
               onOpenThread={openThread}
               onOpenArena={() => setView("arena")}
@@ -780,29 +463,29 @@ export default function App() {
           ) : null}
 
           {view === "home" ? null : (
-          <div className="ws-head">
-            <div className="ws-head-title">
-              <span className="eyebrow">{view === "chat" ? "Thread" : "Comparison"}</span>
-              <h1>{view === "chat" ? (activeThread?.title ?? "New chat") : "Model arena"}</h1>
+            <div className="ws-head">
+              <div className="ws-head-title">
+                <span className="eyebrow">{view === "chat" ? "Thread" : "Comparison"}</span>
+                <h1>{view === "chat" ? (activeThread?.title ?? "New chat") : "Model arena"}</h1>
+              </div>
+              <div className="ws-head-actions">
+                <span className={`chip ${toolsReady ? "chip--cyan" : "chip--plain"}`}>
+                  <Icon name="bolt" size={10} />
+                  {toolsReady ? `${activeToolNames.length} tools` : "tools off"}
+                </span>
+                <button
+                  type="button"
+                  className="ws-route"
+                  aria-expanded={routeOpen}
+                  aria-label="Provider and model"
+                  onClick={() => setRouteOpen((value) => !value)}
+                >
+                  <span className="ws-route-model">{modelId || "No model"}</span>
+                  <span className="ws-route-provider">{manifest.displayName}</span>
+                  <Icon name="chevron" size={12} />
+                </button>
+              </div>
             </div>
-            <div className="ws-head-actions">
-              <span className={`chip ${toolsReady ? "chip--cyan" : "chip--plain"}`}>
-                <Icon name="bolt" size={10} />
-                {toolsReady ? `${activeToolNames.length} tools` : "tools off"}
-              </span>
-              <button
-                type="button"
-                className="ws-route"
-                aria-expanded={routeOpen}
-                aria-label="Provider and model"
-                onClick={() => setRouteOpen((value) => !value)}
-              >
-                <span className="ws-route-model">{modelId || "No model"}</span>
-                <span className="ws-route-provider">{manifest.displayName}</span>
-                <Icon name="chevron" size={12} />
-              </button>
-            </div>
-          </div>
           )}
 
           {view !== "home" && routeOpen ? (
@@ -899,25 +582,13 @@ export default function App() {
             refreshFiles();
           }}
           tools={lastTools}
-          requests={usage}
-          days={spendDays}
+          requests={spend.usage}
+          days={spend.spendDays}
         />
       </div>
 
-      {undoDelete !== null ? (
-        <div className="ws-undo">
-          <p className="ws-undo-text" role="status" aria-live="polite">
-            Deleted “{undoDelete.title}”.
-          </p>
-          <div className="ws-undo-actions">
-            <button type="button" className="btn btn--ghost btn--sm" onClick={undoLastDelete}>
-              Undo
-            </button>
-            <button type="button" className="btn btn--ghost btn--sm" onClick={clearUndo}>
-              Dismiss
-            </button>
-          </div>
-        </div>
+      {pendingUndo !== null ? (
+        <UndoDeleteBar title={pendingUndo.title} onUndo={undoLastDelete} onDismiss={dismissUndo} />
       ) : null}
 
       <Shelf
@@ -940,7 +611,7 @@ export default function App() {
             <ConnectionsPanel
               vault={session.vault}
               connections={connections}
-              store={accountStorage(storage, session.username)}
+              store={accountStore ?? accountStorage(storage, session.username)}
               onChanged={setConnections}
             />
           ) : (

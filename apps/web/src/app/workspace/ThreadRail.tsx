@@ -80,30 +80,34 @@ export function ThreadRail({
       </label>
 
       <ol className="ws-threads">
-        {threads.map((thread) => (
-          <li key={thread.id}>
-            <button
-              type="button"
-              className="ws-thread"
-              aria-current={thread.id === activeId}
-              onClick={() => onOpenThread(thread)}
-            >
-              <span className="ws-thread-title">{thread.title}</span>
-              <span className="ws-thread-preview">{threadPreview(thread) || "No message yet"}</span>
-              <span className="ws-thread-meta">                  {thread.messages.length} {thread.messages.length === 1 ? "message" : "messages"}
-                  {costLabel(thread) === null ? "" : ` · ${costLabel(thread)}`}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="ws-thread-del"
-              aria-label={`Delete ${thread.title}`}
-              onClick={() => onDeleteThread(thread.id)}
-            >
-              <Icon name="trash" size={12} />
-            </button>
-          </li>
-        ))}
+        {threads.map((thread) => {
+          const cost = costLabel(thread);
+          return (
+            <li key={thread.id}>
+              <button
+                type="button"
+                className="ws-thread"
+                aria-current={thread.id === activeId}
+                onClick={() => onOpenThread(thread)}
+              >
+                <span className="ws-thread-title">{thread.title}</span>
+                <span className="ws-thread-preview">{threadPreview(thread) || "No message yet"}</span>
+                <span className="ws-thread-meta">
+                  {thread.messages.length} {thread.messages.length === 1 ? "message" : "messages"}
+                  {cost === null ? "" : ` · ${cost}`}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="ws-thread-del"
+                aria-label={`Delete ${thread.title}`}
+                onClick={() => onDeleteThread(thread.id)}
+              >
+                <Icon name="trash" size={12} />
+              </button>
+            </li>
+          );
+        })}
       </ol>
 
       <div className="ws-budget">

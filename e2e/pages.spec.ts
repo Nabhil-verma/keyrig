@@ -87,6 +87,10 @@ test("a deleted chat can be undone", async ({ page }) => {
   await page.locator(".auth-submit").click();
   await expect(page.locator(".status-chip")).toContainText(username);
 
+  // Sign out first: the first chat of the account still has a pending save.
+  await page.getByRole("button", { name: `Sign out of ${username}` }).click();
+  await expect(page.locator(".auth-card")).toBeVisible();
+
   // The chat record is a device record, so this test can seed it directly.
   await page.evaluate(
     ({ key, at }) => {
