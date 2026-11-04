@@ -177,8 +177,10 @@ package.
 
 | File | What it does |
 |---|---|
+| `backend.ts` | The four fields of a request to the backend and the one request shape (D-07, PR-01, PR-05). |
 | `errors.ts` | The error categories, the remediation actions and the error shape (ER-01, ER-02). |
 | `id.ts` | One random id, with a fallback for a browser without `crypto.randomUUID`. |
+| `publish.ts` | The publish scan that rejects an item holding a key (PR-01). |
 | `redact.ts` | The one redaction function for a key (KS-03). |
 | `schema.ts` | The versioned document and the migration step (AR-03). |
 | `storage.ts` | The `StorageLike` type and the memory storage fallback. |
@@ -220,6 +222,7 @@ package.
 | `agent/agent.ts` | The agent loop, the events and the approval request. |
 | `agent/tools.ts` | The tool definitions, the risk levels and the protected paths (AS-02, MC-04). |
 | `agent/prompts.ts` | The system prompt and the guard prompt. |
+| `agent/sandbox.ts` | The tool sandbox: the allowed capabilities, with no vault (PR-01). |
 | `agent/github.ts` | The GitHub commit call and the repository rules. |
 
 ## Where to put a new file
@@ -244,8 +247,9 @@ package.
 | Path | What it holds |
 |---|---|
 | `e2e/` | The Playwright specs: the smoke test, the account flow, the connectors and the vault transfer. |
+| `sites-preview/` | The Worker for the Freebuff Sites preview: the static host, the hosted model and the optional backend (`backend.mjs`). |
 | `tools/check-layers.mjs` | The layer check (AR-01). |
 | `tools/fake-provider.mjs` | The local provider for a test with no key. Port 8788. |
 | `tools/fake-mcp.mjs` | The local MCP server for a test. Port 8789. |
 | `tools/make-og-card.mjs` | Draw `public/brand/og-card.png` with no dependency. |
-| `docs/` | The architecture, this map, the product rules, the style, the glossary and the test plan. |
+| `docs/` | The architecture, this map, the product rules, the security and data table, the style, the glossary and the test plan. |

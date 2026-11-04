@@ -4,10 +4,15 @@
 // index.html with status 200, so /providers, /security and /app work on a
 // direct visit. Assets with a file extension keep their 404.
 //
-// /api/ai/v1/* is the one server route. It forwards to the Workers AI REST
-// API with the owner's token. The route needs an access code, exchanged for a
+// /api/ai/v1/* is the hosted model. It forwards to the Workers AI REST API
+// with the owner's token. The route needs an access code, exchanged for a
 // signed cookie at /hosted. Every call is counted before it runs, and a
 // missing database refuses the call, so the route never runs uncapped.
+//
+// /api/backend/* is the optional backend for accounts, roles, the marketplace
+// and feature requests (D-07). It refuses every call without a database
+// binding, so local mode and the hosted model do not depend on it.
+import { backendRoute } from "./backend.mjs";
 import {
   MAX_BODY_CHARS,
   bodyProblem,
@@ -282,6 +287,9 @@ export default {
       url.pathname === "/api/ai/v1/chat/completions"
     ) {
       return hostedRoute(request, env, url.pathname);
+    }
+    if (url.pathname === "/api/backend" || url.pathname.startsWith("/api/backend/")) {
+      return backendRoute(request, env, url.pathname);
     }
 
     const response = await env.ASSETS.fetch(request);

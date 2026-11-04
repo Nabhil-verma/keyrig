@@ -3,8 +3,9 @@
 keyrig checks a permission key before a protected feature runs. A role is a set of permission keys. The
 owner role holds every key.
 
-The role records stay on this device. keyrig has no server, so the records live in browser storage with
-the accounts. This file describes the keys, the roles and the rules. The code is in
+In local mode, the role records stay on this device. keyrig has no server in local mode, so the records
+live in browser storage with the accounts. The optional backend on freebuff can also store an account and
+its role (D-07). This file describes the keys, the roles and the rules. The code is in
 [packages/core/src/rbac.ts](../packages/core/src/rbac.ts).
 
 ## Permission keys

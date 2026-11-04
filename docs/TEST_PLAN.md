@@ -65,6 +65,19 @@ The tests need no key and no network. Run `npm test`.
 | AC-05 the last owner keeps the role | `rbac.test.ts`: "stops an admin from demoting the only owner"; "lets an owner step down when a second owner exists" |
 | AC-06 a revoke sets the viewer role | `rbac.test.ts`: "sets the viewer role and keeps the record" |
 
+## Privacy (2026-11-04)
+
+| Rule | Test |
+|---|---|
+| PR-01 no key reaches the backend | `packages/shared/src/tests/backend.test.ts`: "keeps the four allowed fields and drops every other field"; "refuses an allowed field that holds a key-like string" |
+| PR-05 the backend gets only data that the user sends on purpose | `backend.test.ts`: "leaves chats, prompts, cost, usage and streak data on the device" |
+| PR-01 the publish flow rejects an item that holds a key | `packages/shared/src/tests/publish.test.ts`: "rejects a command that holds a key-like string" |
+| PR-01 the Worker rejects a published tool that holds a key | `sites-preview/backend.test.mjs`: "refuses a published tool that holds a key" |
+| PR-01 a tool runs with no vault in the sandbox | `packages/core/src/tests/sandbox.test.ts`: "refuses a capability object that holds the vault" |
+| PR-05 the backend refuses a chat, a cost, usage or a streak | `sites-preview/backend.test.mjs`: "drops no field silently: an extra field is an error" |
+| D-07 the backend is off without a database | `sites-preview/backend.test.mjs`: "refuses every call when the site has no database" |
+| D-07 accounts and roles on the backend | `sites-preview/backend.test.mjs`: "makes the first account the owner and the next account a viewer"; "lets an owner change a role and refuses a change of your own role" |
+
 ## Architecture and tests
 
 | Rule | Test |

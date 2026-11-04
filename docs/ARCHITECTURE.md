@@ -53,4 +53,4 @@ passphrase --PBKDF2--> key --AES-GCM--> ciphertext in browser storage
 
 - The vault holds one encrypted blob. The blob holds the key records.
 - The vault keeps the passphrase key in memory for one session. The lock button drops the key.
-- There is no server. See PR-01.
+- Local mode has no server. The optional backend on freebuff is not on the key path (D-07, PR-01).

@@ -8,7 +8,7 @@ const PRINCIPLES = [
   {
     id: "PR-01",
     title: "You own the keys.",
-    text: "The keyrig server does not receive your keys. A key goes only to the endpoint that you choose.",
+    text: "No key reaches the backend, a tool or a published item. A key goes only to the endpoint that you choose. Local mode has no server.",
   },
   {
     id: "PR-02",
@@ -28,7 +28,7 @@ const PRINCIPLES = [
   {
     id: "PR-05",
     title: "Telemetry is off.",
-    text: "keyrig sends no telemetry by default. Crash reports are off too.",
+    text: "keyrig sends no telemetry by default. The backend gets only what you send on purpose: your account, your published tools, your feature requests and your votes. Chats, keys, cost, usage and streaks stay on this device.",
   },
 ];
 
@@ -76,8 +76,8 @@ export function SecurityPage() {
               Keys stay on <span className="accent">your device.</span>
             </motion.h1>
             <motion.p variants={fadeUp} className="lead">
-              keyrig keeps your keys in this browser. It sends a key only to the endpoint that you set. These are the
-              product rules that the app follows.
+              keyrig keeps your keys in this browser. It sends a key only to the endpoint that you set. Local mode
+              needs no server. These are the product rules that the app follows.
             </motion.p>
             <motion.div variants={fadeUp} className="hero-actions">
               <Link to="/app" className="btn btn--primary btn--lg btn--glow">

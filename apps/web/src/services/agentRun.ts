@@ -2,6 +2,7 @@ import {
   MAX_COMMIT_FILES,
   MAX_TOOL_RESULT_CHARS,
   commitFiles,
+  createToolSandbox,
   parseScene,
   runAgentTurn,
   type AgentApprovalRequest,
@@ -52,7 +53,14 @@ function readyGithub(github: GithubState): boolean {
 }
 
 export async function runToolTurn(options: ToolTurnOptions): Promise<ToolTurnOutcome> {
-  const { workspace, github } = options;
+  // PR-01: the tool code sees the sandbox, not the options object. The vault
+  // is not on the list, and createToolSandbox refuses to build one that holds it.
+  const sandbox = createToolSandbox({
+    workspace: options.workspace,
+    github: options.github,
+    onScene: options.onScene,
+  });
+  const { workspace, github } = sandbox;
 
   const execute = async (input: {
     tool: ToolDefinition;
@@ -104,7 +112,7 @@ export async function runToolTurn(options: ToolTurnOptions): Promise<ToolTurnOut
       }
       case "create_scene": {
         const scene = parseScene(args.scene);
-        options.onScene(scene);
+        sandbox.onScene(scene);
         return {
           ok: true,
           summary: `Rendered "${scene.title}" with ${scene.nodes.length} node(s).`,

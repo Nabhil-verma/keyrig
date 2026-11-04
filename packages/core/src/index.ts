@@ -6,6 +6,7 @@ export * from "./agent/github";
 export * from "./identity/identity";
 export * from "./chat/models";
 export * from "./agent/prompts";
+export * from "./agent/sandbox";
 export * from "./identity/rbac";
 export * from "./chat/scene";
 export * from "./agent/tools";

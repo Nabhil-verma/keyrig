@@ -7,9 +7,9 @@ The owner answered the open questions in section 7 of the reference spec on 2026
 | D-01 | First platform | Web and desktop. The web app comes first. Keys use WebCrypto (KS-02). The desktop keychain comes later (KS-01). |
 | D-02 | v1 scope | Chat, arena and artifacts. The coding agent comes in Phase 3. |
 | D-03 | Day-one providers | OpenAI-compatible, Anthropic and Ollama. |
-| D-04 | Server | No server. All data stays on the device. Corrected 2026-10-29: one optional hosted model runs on keyrig's Worker at `/api/ai/v1`. It runs only when the visitor picks it, and every other provider is still called from the browser (D-14). |
+| D-04 | Server | No server. All data stays on the device. Corrected 2026-10-29: one optional hosted model runs on keyrig's Worker at `/api/ai/v1`. It runs only when the visitor picks it, and every other provider is still called from the browser (D-14). **Amended by D-07.** |
 | D-05 | License | MIT. |
-| D-06 | Teams | No. keyrig is for one user at a time. |
+| D-06 | Teams | No. keyrig is for one user at a time. **Superseded by D-07 for accounts and roles.** |
 
 ## Consequences
 
@@ -22,8 +22,23 @@ The owner answered the open questions in section 7 of the reference spec on 2026
 
 | Number | Question | Decision |
 |---|---|---|
-| D-07 | Sign-in | A username and a password still make the account. Google adds a Gmail recovery address only. GitHub adds a commit account. Neither link signs in to keyrig. |
+| D-16 | Sign-in | A username and a password still make the account. Google adds a Gmail recovery address only. GitHub adds a commit account. Neither link signs in to keyrig. |
 | D-08 | OAuth without a server | Google Identity Services with a public client id, and the GitHub device flow with a public client id. A browser holds no client secret, so D-04 holds. |
 | D-09 | Agent tools | The tools work on a workspace in the browser. There is no shell tool, because a browser cannot start a process. The limits are in `packages/core/src/tools.ts`. |
 | D-10 | 3D modelling | The model sends scene data. keyrig renders it with three.js. The model does not edit geometry in a viewport. |
 | D-11 | AI commit | A commit needs the profile switch, a connected account and a per-call approval. A delete and a commit never use auto approval. |
+
+## D-07 (2026-11-04)
+
+keyrig has an optional backend on freebuff. It is used only for accounts, roles, the marketplace, and
+feature requests. Local mode stays complete and works offline. The default is local mode.
+
+### Consequences
+
+- An offline start still works. Local mode opens the vault and the saved catalog with no network.
+- Recorded-traffic tests still replace real keys (TS-01). The backend changes no test fixture.
+- The backend gets only the four fields in [SECURITY.md](SECURITY.md). No chat, prompt, key, cost,
+  usage or streak data goes to it (PR-05).
+- The key path does not change. No key reaches the backend, a tool or a published item (PR-01).
+- The routes live at `/api/backend/*` on the same Worker. They refuse every call with a 503 when the
+  site has no database binding, so local mode and the hosted model do not depend on them.

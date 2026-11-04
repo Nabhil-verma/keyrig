@@ -5,7 +5,8 @@
 You bring your own provider keys. keyrig stores them encrypted in your browser. Each prompt goes to the
 model that you choose. Every answer shows its model, its key label and its estimated cost.
 
-There is no keyrig server in this version. Telemetry is off.
+There is no keyrig server in local mode. The optional backend on freebuff serves only accounts, roles, the
+marketplace and feature requests. Telemetry is off.
 
 ---
 
@@ -239,16 +240,17 @@ These product rules are not optional. The app follows them. The full text is in
 
 | Rule | Meaning |
 |---|---|
-| PR-01 | You own the keys. The keyrig server does not see a key. This version has no keyrig server. |
+| PR-01 | You own the keys. No key reaches the backend, a tool or a published item. Local mode has no server. |
 | PR-02 | Every answer shows its source: the model and the key label. |
 | PR-03 | Every request shows its cost. An unknown price shows as unknown. |
 | PR-04 | Failures are clear and safe. The app does not fail in silence. |
-| PR-05 | Telemetry is off by default. There is no telemetry code in this version. |
+| PR-05 | Telemetry is off by default. The backend receives only what you send on purpose. |
 
 What keyrig does not do:
 
 - It does not recover a forgotten password. Keep a copy of your password in a safe place.
 - It does not send a key to any endpoint except the one that you choose.
+- It does not send a chat, a prompt, a key, cost data, usage data or a streak to the backend.
 - It does not put a key, a key fragment or a request header in a log, an error or a chat message.
 - It does not guard a role with a server. The role records stay in this browser, so the checks stop mistakes,
   not the device owner.
@@ -345,6 +347,7 @@ Short version:
 | [docs/MAP.md](docs/MAP.md) | The file map: where each file is and what it does. |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layers, the request path and the key path. |
 | [docs/PRODUCT_RULES.md](docs/PRODUCT_RULES.md) | The product rules PR-01 to PR-05. |
+| [docs/SECURITY.md](docs/SECURITY.md) | The data that stays on the device and the data that the backend can store. |
 | [docs/STYLE.md](docs/STYLE.md) | The writing style for all keyrig text. |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | The words that keyrig uses for each meaning. |
 | [docs/TEST_PLAN.md](docs/TEST_PLAN.md) | Each rule and the test that proves it. |
