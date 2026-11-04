@@ -76,3 +76,52 @@ test("the dashboard shows the streak of this device", async ({ page }) => {
   await expect(page.locator(".dash-streak-meta")).toContainText("Best 2");
   await expect(page.locator(".dash-streak-meta")).toContainText("today counts");
 });
+
+test("a deleted chat can be undone", async ({ page }) => {
+  const username = `undo${Date.now().toString(36)}`;
+
+  await page.goto("/app");
+  await page.getByLabel("Username").fill(username);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByLabel("Repeat the password").fill(PASSWORD);
+  await page.locator(".auth-submit").click();
+  await expect(page.locator(".status-chip")).toContainText(username);
+
+  // The chat record is a device record, so this test can seed it directly.
+  await page.evaluate(
+    ({ key, at }) => {
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          schemaVersion: 1,
+          appliedMigrations: [],
+          data: [
+            {
+              id: "thread_undo",
+              title: "Keep me",
+              createdAt: at,
+              updatedAt: at,
+              messages: [{ id: "m1", role: "user", content: "Keep me", at }],
+            },
+          ],
+        }),
+      );
+    },
+    { key: `keyrig.account.${username}.keyrig.threads.v1`, at: new Date().toISOString() },
+  );
+
+  await page.reload();
+  await signIn(page, username);
+
+  await expect(page.locator(".ws-thread-title", { hasText: "Keep me" })).toHaveCount(1);
+
+  // 1. Deleting the chat hides it and offers the undo.
+  await page.getByRole("button", { name: "Delete Keep me" }).click();
+  await expect(page.locator(".ws-thread-title", { hasText: "Keep me" })).toHaveCount(0);
+  await expect(page.locator(".ws-undo")).toContainText("Keep me");
+
+  // 2. Undo puts it back and closes the bar.
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.locator(".ws-undo")).toHaveCount(0);
+  await expect(page.locator(".ws-thread-title", { hasText: "Keep me" })).toHaveCount(1);
+});

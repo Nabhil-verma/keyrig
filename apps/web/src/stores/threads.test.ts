@@ -9,6 +9,7 @@ import {
   orderThreads,
   readThreads,
   removeThread,
+  restoreThread,
   threadPreview,
   titleFrom,
   upsertThread,
@@ -69,6 +70,18 @@ describe("the saved chats", () => {
 
   it("removes a thread", () => {
     expect(removeThread([thread("a", "2026-11-01T00:00:00.000Z")], "a")).toEqual([]);
+  });
+
+  it("restores a removed thread with its messages and its place", () => {
+    const old = thread("old", "2026-10-31T00:00:00.000Z");
+    const removed = thread("a", "2026-11-01T00:00:00.000Z", [message("m1", "user", "keep me")]);
+    const newest = thread("b", "2026-11-02T00:00:00.000Z");
+
+    const without = removeThread([newest, old, removed], "a");
+    const restored = restoreThread(without, removed);
+
+    expect(restored.map((item) => item.id)).toEqual(["b", "a", "old"]);
+    expect(restored[1]?.messages[0]?.content).toBe("keep me");
   });
 
   it("drops a broken thread and a broken message", () => {

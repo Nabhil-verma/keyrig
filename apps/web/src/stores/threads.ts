@@ -303,6 +303,11 @@ export function removeThread(threads: readonly StoredThread[], id: string): Stor
   return threads.filter((thread) => thread.id !== id);
 }
 
+/** Put a just-deleted chat back, in the place its updatedAt gives it. */
+export function restoreThread(threads: readonly StoredThread[], thread: StoredThread): StoredThread[] {
+  return upsertThread(threads, thread);
+}
+
 /** The first line of the thread text, for the rail. */
 export function threadPreview(thread: StoredThread): string {
   const assistant = thread.messages.find((message) => message.role === "assistant" && message.content.length > 0);

@@ -53,6 +53,7 @@ import {
   MAX_THREADS_MESSAGES,
   readThreads,
   removeThread as removeThreadFromList,
+  restoreThread,
   threadPreview,
   titleFrom,
   upsertThread,
@@ -69,6 +70,8 @@ import { safeError } from "./workspace/chatTurnHelpers";
 import { useChatTurns } from "./workspace/useChatTurns";
 
 const storage = browserStorage();
+/** The window for undoing a deleted chat. */
+const UNDO_DELETE_MS = 8_000;
 
 /** The last message that matches, so the chat shows its newest facts. */
 function lastWhere<T>(items: readonly T[], test: (item: T) => boolean): T | undefined {
@@ -131,11 +134,14 @@ export default function App() {
   const [shelf, setShelf] = useState<{ open: boolean; tab: ShelfTab }>({ open: false, tab: "keys" });
   const [routeOpen, setRouteOpen] = useState(false);
   const [inspect, setInspect] = useState<InspectTab>("outbound");
+  /** UX-05: the last deleted chat, kept for a moment so a stray click is reversible. */
+  const [undoDelete, setUndoDelete] = useState<StoredThread | null>(null);
 
   const bus = useMemo(() => createUsageBus(), []);
   const abortRef = useRef<AbortController | null>(null);
   const approvalRef = useRef<((decision: "approve" | "deny") => void) | null>(null);
   const threadsRef = useRef<StoredThread[]>([]);
+  const undoTimerRef = useRef<number | null>(null);
   /** AS-05: one workspace for the signed-in account. */
   const workspace = useMemo(
     () => (session === null ? null : new Workspace({ storage: accountStorage(storage, session.username) })),
@@ -466,6 +472,45 @@ export default function App() {
     }
   };
 
+  /** Drop the pending undo, if there is one. */
+  const clearUndo = useCallback((): void => {
+    if (undoTimerRef.current !== null) {
+      window.clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+    setUndoDelete(null);
+  }, []);
+
+  /** Hold a deleted chat for a few seconds. A second delete replaces the first. */
+  const armUndo = useCallback((thread: StoredThread): void => {
+    if (undoTimerRef.current !== null) {
+      window.clearTimeout(undoTimerRef.current);
+    }
+    setUndoDelete(thread);
+    undoTimerRef.current = window.setTimeout(() => {
+      undoTimerRef.current = null;
+      setUndoDelete(null);
+    }, UNDO_DELETE_MS);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (undoTimerRef.current !== null) {
+        window.clearTimeout(undoTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const undoLastDelete = (): void => {
+    if (undoDelete === null) {
+      return;
+    }
+    const restored = undoDelete;
+    clearUndo();
+    persistThreads(restoreThread(threadsRef.current, restored));
+  };
+
   const openThread = (thread: StoredThread): void => {
     abortRef.current?.abort();
     approvalRef.current?.("deny");
@@ -505,8 +550,12 @@ export default function App() {
     if (streaming) {
       return;
     }
+    const deleted = threadsRef.current.find((thread) => thread.id === id);
     const next = removeThreadFromList(threadsRef.current, id);
     persistThreads(next);
+    if (deleted !== undefined) {
+      armUndo(deleted);
+    }
     if (id !== activeId) {
       return;
     }
@@ -520,6 +569,7 @@ export default function App() {
     }
     setActiveId(fallback.id);
     setMessages(fallback.messages);
+    setArenaRun(fallback.arena ?? null);
   };
 
   const enterSession = (account: SignedInAccount): void => {
@@ -592,6 +642,7 @@ export default function App() {
   /** Sign-out locks the vault, drops the decrypted keys from memory and stops any stream. */
   const signOut = (): void => {
     abortRef.current?.abort();
+    clearUndo();
     session?.vault.lock();
     setSession(null);
     setKeys([]);
@@ -852,6 +903,22 @@ export default function App() {
           days={spendDays}
         />
       </div>
+
+      {undoDelete !== null ? (
+        <div className="ws-undo">
+          <p className="ws-undo-text" role="status" aria-live="polite">
+            Deleted “{undoDelete.title}”.
+          </p>
+          <div className="ws-undo-actions">
+            <button type="button" className="btn btn--ghost btn--sm" onClick={undoLastDelete}>
+              Undo
+            </button>
+            <button type="button" className="btn btn--ghost btn--sm" onClick={clearUndo}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <Shelf
         open={shelf.open}

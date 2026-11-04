@@ -965,6 +965,39 @@
   line-height: 1.45;
 }
 
+/* The last deleted chat waits here, briefly, so a stray click is reversible. */
+.ws-undo {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(520px, calc(100vw - 24px));
+  padding: 8px 10px 8px 14px;
+  border: 1px solid var(--control-line);
+  border-radius: 12px;
+  background: var(--surface-3);
+  box-shadow: var(--shadow);
+  transform: translateX(-50%);
+}
+
+.ws-undo-text {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-undo-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
 .icon-button:disabled {
   opacity: 0.35;
   cursor: not-allowed;
