@@ -20,6 +20,10 @@ describe("the settings keep only known values", () => {
       motion: "reduced",
       density: "compact",
       accent: "#3dd6c6",
+      accentContrast: "normal",
+      fontSize: "medium",
+      layoutWidth: "cozy",
+      displayName: "",
       rememberRoute: false,
       instructions: "",
       dailyBudgetUsd: null,
@@ -48,6 +52,12 @@ describe("the settings keep only known values", () => {
   it("turns off route memory only for a real false", () => {
     expect(normalizeSettings({ rememberRoute: false }).rememberRoute).toBe(false);
     expect(normalizeSettings({ rememberRoute: "no" as never }).rememberRoute).toBe(true);
+  });
+
+  it("PR-05 keeps the display name on one line and inside the limit", () => {
+    expect(normalizeSettings({ displayName: "  Alex\nSmith  " }).displayName).toBe("Alex Smith");
+    expect(normalizeSettings({ displayName: "x".repeat(80) }).displayName).toHaveLength(40);
+    expect(normalizeSettings({ displayName: 7 as never }).displayName).toBe("");
   });
 
   it("keeps the guard instructions as text and drops a bad budget", () => {

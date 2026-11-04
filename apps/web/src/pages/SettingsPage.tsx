@@ -1,19 +1,23 @@
 import { Link } from "../app/router";
 import { SiteFooter, SiteHeader } from "../app/SiteChrome";
 import { Icon } from "../components/ui/Icon";
-import { AgentSection } from "./settings/AgentSection";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { AppSection } from "./settings/AppSection";
 import { ConnectorsSection } from "./settings/ConnectorsSection";
 import { GuardrailsSection } from "./settings/GuardrailsSection";
+import { KeysSection } from "./settings/KeysSection";
 import { PluginsSection } from "./settings/PluginsSection";
+import { ProfileSection } from "./settings/ProfileSection";
 import { SkillsSection } from "./settings/SkillsSection";
+import { ToolsSection } from "./settings/ToolsSection";
 
 const INDEX = [
+  { id: "profile", label: "Profile" },
   { id: "appearance", label: "Appearance" },
+  { id: "tools", label: "Tools" },
+  { id: "keys", label: "Keys" },
   { id: "app", label: "App" },
   { id: "guardrails", label: "Guardrails" },
-  { id: "agent", label: "Agent tools" },
   { id: "skills", label: "Skills" },
   { id: "connectors", label: "Connectors" },
   { id: "plugins", label: "Plugins" },
@@ -31,7 +35,8 @@ export function SettingsPage() {
             Make it <span className="accent">yours.</span>
           </h1>
           <p className="lead">
-            The look, the saved prompts and the provider packs. Everything here stays in this browser.
+            The profile, the look, the tools, the keys and the saved prompts. Everything here stays in this
+            browser.
           </p>
         </header>
 
@@ -44,10 +49,12 @@ export function SettingsPage() {
         </nav>
 
         <div className="settings-stack">
+          <ProfileSection />
           <AppearanceSection />
+          <ToolsSection />
+          <KeysSection />
           <AppSection />
           <GuardrailsSection />
-          <AgentSection />
           <SkillsSection />
           <ConnectorsSection />
           <PluginsSection />

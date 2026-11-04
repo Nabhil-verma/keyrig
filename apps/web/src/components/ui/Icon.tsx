@@ -32,7 +32,10 @@ export type IconName =
   | "share"
   | "search"
   | "file"
-  | "settings";
+  | "settings"
+  | "home"
+  | "shop"
+  | "idea";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   chat: <path d="M4 5.5h16v10.5H9l-5 4V5.5Z" />,
@@ -172,10 +175,30 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M13 3.5v5h5" />
     </>
   ),
+  home: (
+    <>
+      <path d="M4 10.5 12 4l8 6.5" />
+      <path d="M6.5 9.5V20h11V9.5" />
+      <path d="M10 20v-5h4v5" />
+    </>
+  ),
   settings: (
     <>
       <circle cx="12" cy="12" r="3" />
       <path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8" />
+    </>
+  ),
+  shop: (
+    <>
+      <path d="M4 9.5 5.5 4h13L20 9.5" />
+      <path d="M4 9.5h16V20H4V9.5Z" />
+      <path d="M9 13.5h6" />
+    </>
+  ),
+  idea: (
+    <>
+      <path d="M9 18h6M10 21h4" />
+      <path d="M12 3.5a6 6 0 0 0-3.5 10.9V16h7v-1.6A6 6 0 0 0 12 3.5Z" />
     </>
   ),
 };

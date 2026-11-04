@@ -9,6 +9,7 @@ import {
   holdsKey,
   roleProblem,
   routeWithStore,
+  statusProblem,
   toolProblem,
   verifyPassword,
 } from "./backend.mjs";
@@ -22,12 +23,14 @@ function memoryStore() {
   const tools = [];
   const requests = [];
   const votes = new Map();
+  const requestVotes = new Map();
   return {
     accounts,
     sessions,
     tools,
     requests,
     votes,
+    requestVotes,
     async accountByName(username) {
       const row = accounts.get(username);
       return row === undefined ? null : { ...row };
@@ -44,11 +47,17 @@ function memoryStore() {
         row.role = role;
       }
     },
+    async listAccounts() {
+      return [...accounts.values()].map((row) => ({ username: row.username, role: row.role }));
+    },
     async ownerCount() {
       return [...accounts.values()].filter((row) => row.role === "owner").length;
     },
     async createSession({ id, username, expires }) {
       sessions.set(id, { username, expires });
+    },
+    async endSession(id) {
+      sessions.delete(id);
     },
     async sessionOwner(id, now) {
       const row = sessions.get(id);
@@ -58,10 +67,41 @@ function memoryStore() {
       return tools.slice(0, limit);
     },
     async createTool(row) {
-      tools.push({ ...row });
+      tools.push({ ...row, permissions: row.permissions ?? [], version: row.version ?? 1, tags: row.tags ?? [] });
     },
     async createRequest(row) {
-      requests.push({ ...row });
+      requests.push({ ...row, status: "open", statusReason: "" });
+    },
+    async listRequests(limit, viewer) {
+      return requests
+        .map((row) => ({
+          ...row,
+          votes: [...requestVotes.values()].filter((vote) => vote.requestId === row.id && vote.up).length,
+          voted:
+            viewer === null || viewer === undefined
+              ? false
+              : [...requestVotes.values()].some(
+                  (vote) => vote.requestId === row.id && vote.username === viewer && vote.up,
+                ),
+        }))
+        .sort((left, right) => right.votes - left.votes)
+        .slice(0, limit);
+    },
+    async setRequestStatus(id, status, reason) {
+      const row = requests.find((item) => item.id === id);
+      if (row === undefined) {
+        return false;
+      }
+      row.status = status;
+      row.statusReason = reason;
+      return true;
+    },
+    async setRequestVote({ username, requestId, up, createdAt }) {
+      if (!requests.some((item) => item.id === requestId)) {
+        return false;
+      }
+      requestVotes.set(`${username}|${requestId}`, { username, requestId, up, createdAt });
+      return true;
     },
     async saveVote(vote) {
       votes.set(`${vote.username}|${vote.toolId}`, { ...vote });
@@ -333,6 +373,156 @@ describe("D-07 the optional backend holds accounts, roles, the marketplace and f
     expect(accountProblem({ username: "alice", password: "short" })).toContain("at least 8");
     expect(accountProblem({ username: "a", password: "correct-horse" })).toContain("3 to 32");
     expect(accountProblem({ username: "alice", password: "correct-horse" })).toBeNull();
+  });
+
+  it("lets the owner read the role list and refuses a viewer", async () => {
+    const store = memoryStore();
+    const owner = await signedUp(store, "alice");
+    const viewer = await signedUp(store, "bob");
+
+    const allowed = await route(get("/api/backend/roles", owner.cookie), store);
+    expect(allowed.status).toBe(200);
+    expect((await allowed.json()).accounts).toEqual([
+      { username: "alice", role: "owner" },
+      { username: "bob", role: "viewer" },
+    ]);
+
+    const refused = await route(get("/api/backend/roles", viewer.cookie), store);
+    expect(refused.status).toBe(403);
+  });
+
+  it("ends the backend session on sign-out and keeps the local account", async () => {
+    const store = memoryStore();
+    const { cookie } = await signedUp(store, "alice");
+
+    const out = await route(post("/api/backend/sign-out", {}, cookie), store);
+    expect(out.status).toBe(200);
+    expect(out.headers.get("set-cookie")).toContain("Max-Age=0");
+
+    const after = await route(get("/api/backend/account", cookie), store);
+    expect(after.status).toBe(401);
+    expect(store.accounts.has("alice")).toBe(true);
+  });
+
+  it("stores a tool definition and returns it to the marketplace", async () => {
+    const store = memoryStore();
+    const { cookie } = await signedUp(store, "alice");
+    const definition = {
+      name: "slugify",
+      description: "Turn a title into a slug.",
+      permissions: ["none"],
+      inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
+      script: "return { slug: String(input.text ?? '') };",
+    };
+
+    const published = await route(
+      post(
+        "/api/backend/tools",
+        {
+          publishedTools: {
+            name: "slugify",
+            description: "Turn a title into a slug.",
+            permissions: ["none"],
+            tags: ["text"],
+            version: 2,
+            definition,
+          },
+        },
+        cookie,
+      ),
+      store,
+    );
+    expect(published.status).toBe(201);
+
+    const listed = await route(get("/api/backend/tools"), store);
+    const body = await listed.json();
+    expect(body.tools[0].definition.script).toBe(definition.script);
+    expect(body.tools[0].permissions).toEqual(["none"]);
+    expect(body.tools[0].version).toBe(2);
+    expect(body.tools[0].tags).toEqual(["text"]);
+  });
+
+  it("refuses a tool definition that holds a key", async () => {
+    const store = memoryStore();
+    const { cookie } = await signedUp(store, "alice");
+
+    const response = await route(
+      post(
+        "/api/backend/tools",
+        {
+          publishedTools: {
+            name: "leak",
+            description: "A tool that leaks.",
+            permissions: ["none"],
+            definition: {
+              name: "leak",
+              description: "A tool that leaks.",
+              inputSchema: { type: "object", properties: {}, required: [] },
+              script: `return { key: "${OPENAI_KEY}" };`,
+            },
+          },
+        },
+        cookie,
+      ),
+      store,
+    );
+
+    expect(response.status).toBe(400);
+    expect(store.tools).toHaveLength(0);
+    expect(JSON.stringify(store.tools)).not.toContain(OPENAI_KEY);
+  });
+
+  it("lists a request with its votes and stores a status with a reason", async () => {
+    const store = memoryStore();
+    const owner = await signedUp(store, "alice");
+    const viewer = await signedUp(store, "bob");
+
+    const created = await route(
+      post("/api/backend/requests", { featureRequests: { title: "Add a cost export" } }, owner.cookie),
+      store,
+    );
+    expect(created.status).toBe(201);
+    const id = (await created.json()).featureRequest.id;
+
+    const vote = await route(
+      post("/api/backend/request-votes", { votes: { requestId: id, up: true } }, viewer.cookie),
+      store,
+    );
+    expect(vote.status).toBe(200);
+
+    const listed = await route(get("/api/backend/requests", viewer.cookie), store);
+    const rows = (await listed.json()).featureRequests;
+    expect(rows[0].votes).toBe(1);
+    expect(rows[0].voted).toBe(true);
+    expect(rows[0].status).toBe("open");
+
+    const refused = await route(
+      post(
+        "/api/backend/request-status",
+        { featureRequests: { id, status: "planned", reason: "Next release." } },
+        viewer.cookie,
+      ),
+      store,
+    );
+    expect(refused.status).toBe(403);
+
+    const changed = await route(
+      post(
+        "/api/backend/request-status",
+        { featureRequests: { id, status: "planned", reason: "Next release." } },
+        owner.cookie,
+      ),
+      store,
+    );
+    expect(changed.status).toBe(200);
+
+    const after = await route(get("/api/backend/requests"), store);
+    expect((await after.json()).featureRequests[0].status).toBe("planned");
+  });
+
+  it("refuses a status that keyrig does not know", () => {
+    expect(statusProblem({ id: "r1", status: "shipped" })).toContain("request status");
+    expect(statusProblem({ id: "r1", status: "done", reason: "Shipped." })).toBeNull();
   });
 
   it("hashes two passwords with two different salts", async () => {

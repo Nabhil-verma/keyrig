@@ -29,6 +29,7 @@ import {
 } from "@keyrig/providers";
 import { ArenaPanel } from "../components/ArenaPanel";
 import { ChatPanel } from "../components/ChatPanel";
+import { Dashboard } from "./workspace/Dashboard";
 import { ConnectionsPanel } from "../components/ConnectionsPanel";
 import { KeyPanel } from "../components/KeyPanel";
 import { RolesPanel } from "../components/RolesPanel";
@@ -42,6 +43,7 @@ import { readConnections, type AccountConnections } from "../stores/connections"
 import { readRoute, writeRoute } from "../stores/routeStore";
 import { useSettings, writeSettings } from "../stores/settings";
 import { addSpend, readSpend, readSpendHistory, utcDay } from "../stores/spendStore";
+import { recordActivity } from "../lib/streak";
 import { browserStorage } from "../lib/storage";
 import {
   atMessageCap,
@@ -96,7 +98,7 @@ export default function App() {
   const [modelId, setModelId] = useState("gpt-5.4");
   const [keyId, setKeyId] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
-  const [view, setView] = useState<"chat" | "arena">("chat");
+  const [view, setView] = useState<"home" | "chat" | "arena">("home");
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [totalCost, setTotalCost] = useState(0);
@@ -170,6 +172,7 @@ export default function App() {
     setSpendDays(readSpendHistory(storage));
     const unsubscribe = bus.subscribe((event) => {
       setTotalCost((value) => value + event.costUsd);
+      recordActivity(storage);
       setSpentToday(addSpend(storage, event.costUsd));
       setSpendDays(readSpendHistory(storage));
       setUsage((current) => [...current, event].slice(-20));
@@ -548,7 +551,7 @@ export default function App() {
     setTotalCost(0);
     setOverBudget(false);
     setSpentToday(readSpend(storage, utcDay()));
-    setView("chat");
+    setView("home");
     setProviderModels([]);
     setModelsError(null);
     setConnections(readConnections(accountStore));
@@ -709,6 +712,23 @@ export default function App() {
         />
 
         <main className="ws-main">
+          {view === "home" ? (
+            <Dashboard
+              username={session.username}
+              displayName={settings.displayName}
+              role={role}
+              keys={keys}
+              agentSettings={agentSettings}
+              threads={threads}
+              spendDays={spendDays}
+              onNewChat={newChat}
+              onOpenThread={openThread}
+              onOpenArena={() => setView("arena")}
+              onOpenKeys={() => setShelf({ open: true, tab: "keys" })}
+            />
+          ) : null}
+
+          {view === "home" ? null : (
           <div className="ws-head">
             <div className="ws-head-title">
               <span className="eyebrow">{view === "chat" ? "Thread" : "Comparison"}</span>
@@ -732,8 +752,9 @@ export default function App() {
               </button>
             </div>
           </div>
+          )}
 
-          {routeOpen ? (
+          {view !== "home" && routeOpen ? (
             <RoutePopover
               onClose={() => setRouteOpen(false)}
               manifests={enabledManifests}
@@ -759,7 +780,7 @@ export default function App() {
             />
           ) : null}
 
-          {catalogWarning !== null ? (
+          {view !== "home" && catalogWarning !== null ? (
             <div className="ws-warn" role="status">
               <Icon name="alert" size={12} />
               {catalogWarning}
@@ -774,7 +795,7 @@ export default function App() {
             </div>
           ) : null}
 
-          {view === "chat" ? (
+          {view === "home" ? null : view === "chat" ? (
             <ChatPanel
               messages={messages}
               streaming={streaming}

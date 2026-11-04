@@ -195,7 +195,8 @@ describe("the hosted session", () => {
   it("refuses an altered, expired or foreign session", async () => {
     const session = await issueSession(SALT);
     const [id, expires, signature] = session.value.split(".");
-    expect(await readSession(`${id}.${expires}.${signature.slice(0, -1)}0`, SALT)).toBeNull();
+    const altered = `${signature.slice(0, -1)}${signature.endsWith("0") ? "1" : "0"}`;
+    expect(await readSession(`${id}.${expires}.${altered}`, SALT)).toBeNull();
     expect(await readSession(session.value, "another salt")).toBeNull();
     expect(await readSession(session.value, SALT, Number(expires) * 1000 + 1)).toBeNull();
     expect(await readSession(`x.${expires}.${signature}`, SALT)).toBeNull();

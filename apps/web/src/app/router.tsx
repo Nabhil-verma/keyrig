@@ -1,9 +1,25 @@
 import { useEffect, useState, type AnchorHTMLAttributes, type MouseEvent } from "react";
 
 /** The pages of the web app. Any other path shows the not-found page. */
-export type Route = "/" | "/providers" | "/security" | "/settings" | "/app" | "not-found";
+export type Route =
+  | "/"
+  | "/providers"
+  | "/security"
+  | "/settings"
+  | "/marketplace"
+  | "/requests"
+  | "/app"
+  | "not-found";
 
-const KNOWN_PATHS: readonly string[] = ["/", "/providers", "/security", "/settings", "/app"];
+const KNOWN_PATHS: readonly string[] = [
+  "/",
+  "/providers",
+  "/security",
+  "/settings",
+  "/marketplace",
+  "/requests",
+  "/app",
+];
 const NAVIGATE_EVENT = "keyrig:navigate";
 
 function readPath(): string {

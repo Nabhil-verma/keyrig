@@ -24,7 +24,12 @@ export const MAX_TOOL_NAME = 80;
 export const MAX_DESCRIPTION = 2_000;
 export const MAX_TITLE = 200;
 export const MAX_TOOL_ROWS = 100;
+export const MAX_TOOL_SCRIPT = 20_000;
+export const MAX_TAGS = 8;
+export const MAX_STATUS_REASON = 400;
 export const PBKDF2_ITERATIONS = 100_000;
+export const TOOL_PERMISSIONS = Object.freeze(["none", "network", "files", "run-code"]);
+export const REQUEST_STATUSES = Object.freeze(["open", "planned", "done", "declined"]);
 export const RISK_LEVELS = Object.freeze(["read", "write", "destructive", "external-write"]);
 export const ROLE_IDS = Object.freeze(["owner", "admin", "member", "viewer"]);
 export const ROLE_RANK = Object.freeze({ owner: 3, admin: 2, member: 1, viewer: 0 });
@@ -174,8 +179,17 @@ export function toolProblem(tool) {
   if (name.length > MAX_TOOL_NAME) {
     return `The tool name is longer than ${MAX_TOOL_NAME} characters.`;
   }
-  if (!RISK_LEVELS.includes(tool.risk)) {
+  const permissions = Array.isArray(tool.permissions) ? tool.permissions : null;
+  if (permissions === null && !RISK_LEVELS.includes(tool.risk)) {
     return `The tool needs one risk level: ${RISK_LEVELS.join(", ")}.`;
+  }
+  if (permissions !== null) {
+    if (permissions.length === 0) {
+      return "A tool needs one permission. Use none when the tool works on its input only.";
+    }
+    if (permissions.some((permission) => !TOOL_PERMISSIONS.includes(permission))) {
+      return `A tool permission is one of ${TOOL_PERMISSIONS.join(", ")}.`;
+    }
   }
   const description = typeof tool.description === "string" ? tool.description.trim() : "";
   if (description.length === 0) {
@@ -183,6 +197,34 @@ export function toolProblem(tool) {
   }
   if (description.length > MAX_DESCRIPTION) {
     return `The description is longer than ${MAX_DESCRIPTION} characters.`;
+  }
+  const definition = tool.definition;
+  if (definition !== undefined) {
+    if (definition === null || typeof definition !== "object" || Array.isArray(definition)) {
+      return "The tool definition must be one object.";
+    }
+    if (typeof definition.name !== "string" || definition.name.trim().length === 0) {
+      return "The tool definition needs a name.";
+    }
+    if (typeof definition.description !== "string" || definition.description.trim().length === 0) {
+      return "The tool definition needs a description.";
+    }
+    if (typeof definition.script !== "string" || definition.script.trim().length === 0) {
+      return "The tool definition needs a script.";
+    }
+    if (definition.script.length > MAX_TOOL_SCRIPT) {
+      return `The tool script is longer than ${MAX_TOOL_SCRIPT} characters.`;
+    }
+    if (
+      definition.inputSchema === null ||
+      typeof definition.inputSchema !== "object" ||
+      Array.isArray(definition.inputSchema)
+    ) {
+      return "The tool definition needs an input schema.";
+    }
+  }
+  if (tool.tags !== undefined && (!Array.isArray(tool.tags) || tool.tags.length > MAX_TAGS)) {
+    return `A published tool takes up to ${MAX_TAGS} tags.`;
   }
   const found = findSecret(tool, "");
   if (found !== null) {
@@ -214,18 +256,69 @@ export function requestProblem(item) {
   return null;
 }
 
+/** The reason to refuse a request status change, or null. */
+export function statusProblem(item) {
+  if (item === null || typeof item !== "object" || Array.isArray(item)) {
+    return "A status change names one request and one status.";
+  }
+  if (typeof item.id !== "string" || item.id.length === 0) {
+    return "A status change names one request.";
+  }
+  if (!REQUEST_STATUSES.includes(item.status)) {
+    return `A request status is one of ${REQUEST_STATUSES.join(", ")}.`;
+  }
+  if (item.reason !== undefined && typeof item.reason !== "string") {
+    return "The reason must be text.";
+  }
+  if (typeof item.reason === "string" && item.reason.length > MAX_STATUS_REASON) {
+    return `The reason is longer than ${MAX_STATUS_REASON} characters.`;
+  }
+  return null;
+}
+
 /** The reason to refuse a vote, or null. */
 export function voteProblem(vote) {
   if (vote === null || typeof vote !== "object" || Array.isArray(vote)) {
     return "A vote must be one object.";
   }
-  if (typeof vote.toolId !== "string" || vote.toolId.length === 0) {
-    return "A vote names one tool.";
+  const target = vote.toolId ?? vote.requestId;
+  if (typeof target !== "string" || target.length === 0) {
+    return "A vote names one item.";
   }
   if (typeof vote.up !== "boolean") {
     return "A vote is up or down.";
   }
   return null;
+}
+
+/** Map one stored tool row to the shape that the app reads. */
+function toolRow(row) {
+  const parse = (value, fallback) => {
+    if (Array.isArray(value) || (value !== null && typeof value === "object")) {
+      return value;
+    }
+    if (typeof value !== "string" || value.length === 0) {
+      return fallback;
+    }
+    try {
+      return JSON.parse(value);
+    } catch {
+      return fallback;
+    }
+  };
+  return {
+    id: row.id,
+    name: row.name,
+    publisher: row.publisher,
+    risk: row.risk,
+    description: row.description,
+    createdAt: row.created_at ?? row.createdAt ?? null,
+    permissions: parse(row.permissions, []),
+    version: Number(row.version ?? 1),
+    tags: parse(row.tags, []),
+    definition:
+      typeof row.definition === "string" ? parse(row.definition, null) : (row.definition ?? null),
+  };
 }
 
 /** AC-04 and AC-05, on the server: the reason to refuse a role change, or null. */
@@ -400,7 +493,8 @@ async function accountRoute(request, env, store, url) {
 
 async function toolsRoute(request, env, store) {
   if (request.method === "GET") {
-    return json(200, { tools: await store.listTools(MAX_TOOL_ROWS) });
+    const rows = await store.listTools(MAX_TOOL_ROWS);
+    return json(200, { tools: rows.map(toolRow) });
   }
   if (request.method !== "POST") {
     return problem(405, "method_not_allowed", "Use GET or POST for the marketplace.", {
@@ -420,21 +514,41 @@ async function toolsRoute(request, env, store) {
   if (refusal !== null) {
     return problem(400, "publish_refused", refusal);
   }
+  const permissions = Array.isArray(tool.permissions) ? tool.permissions : [];
+  const risk = RISK_LEVELS.includes(tool.risk) ? tool.risk : permissions.includes("run-code") ? "external-write" : "read";
+  const definition = tool.definition ?? null;
   const row = {
     id: crypto.randomUUID(),
     name: tool.name.trim(),
     publisher: username,
-    risk: tool.risk,
+    risk,
     description: tool.description.trim(),
     createdAt: new Date().toISOString(),
+    permissions,
+    version: Number.isInteger(tool.version) && tool.version > 0 ? tool.version : 1,
+    tags: Array.isArray(tool.tags) ? tool.tags.map((tag) => String(tag).slice(0, 40)).slice(0, MAX_TAGS) : [],
+    definition,
   };
   await store.createTool(row);
-  return json(201, { tool: { id: row.id, name: row.name, publisher: row.publisher } });
+  return json(201, { tool: toolRow(row) });
 }
 
 async function requestsRoute(request, env, store) {
+  if (request.method === "GET") {
+    const username = await signedIn(request, env, store);
+    const rows = await store.listRequests(MAX_TOOL_ROWS, username);
+    return json(200, {
+      featureRequests: rows.map((row) => ({
+        ...row,
+        votes: Number(row.votes ?? 0),
+        voted: Boolean(row.voted),
+      })),
+    });
+  }
   if (request.method !== "POST") {
-    return problem(405, "method_not_allowed", "Use POST for a feature request.", { allow: "POST" });
+    return problem(405, "method_not_allowed", "Use GET or POST for a feature request.", {
+      allow: "GET, POST",
+    });
   }
   const username = await signedIn(request, env, store);
   if (username === null) {
@@ -457,7 +571,80 @@ async function requestsRoute(request, env, store) {
     createdAt: new Date().toISOString(),
   };
   await store.createRequest(row);
-  return json(201, { featureRequest: { id: row.id, title: row.title } });
+  return json(201, { featureRequest: { id: row.id, title: row.title, status: "open", votes: 0 } });
+}
+
+/** AC-04: only an owner or an admin sets a request status. */
+async function requestStatusRoute(request, env, store) {
+  if (request.method !== "POST") {
+    return problem(405, "method_not_allowed", "Use POST for a request status.", { allow: "POST" });
+  }
+  const username = await signedIn(request, env, store);
+  const actor = username === null ? null : await store.accountByName(username);
+  if (actor === null) {
+    return problem(401, "backend_sign_in", SIGN_IN_FIRST);
+  }
+  if (actor.role !== "owner" && actor.role !== "admin") {
+    return problem(403, "role_forbidden", "Your role cannot change a request status.");
+  }
+  const read = await readBody(request);
+  if (read.refusal) {
+    return read.refusal;
+  }
+  const item = read.body.featureRequests ?? null;
+  const refusal = statusProblem(item);
+  if (refusal !== null) {
+    return problem(400, "status_invalid", refusal);
+  }
+  const found = await store.setRequestStatus(item.id, item.status, typeof item.reason === "string" ? item.reason.trim() : "");
+  if (!found) {
+    return problem(404, "request_unknown", "That feature request is not on this site.");
+  }
+  return json(200, { featureRequest: { id: item.id, status: item.status } });
+}
+
+/** One vote on one feature request. A vote replaces the earlier vote of the account. */
+async function requestVotesRoute(request, env, store) {
+  if (request.method !== "POST") {
+    return problem(405, "method_not_allowed", "Use POST for a vote.", { allow: "POST" });
+  }
+  const username = await signedIn(request, env, store);
+  if (username === null) {
+    return problem(401, "backend_sign_in", SIGN_IN_FIRST);
+  }
+  const read = await readBody(request);
+  if (read.refusal) {
+    return read.refusal;
+  }
+  const vote = read.body.votes ?? null;
+  const refusal = voteProblem(vote);
+  if (refusal !== null) {
+    return problem(400, "vote_invalid", refusal);
+  }
+  const requestId = vote.requestId;
+  const found = await store.setRequestVote({
+    username,
+    requestId,
+    up: vote.up,
+    createdAt: new Date().toISOString(),
+  });
+  if (!found) {
+    return problem(404, "request_unknown", "That feature request is not on this site.");
+  }
+  return json(200, { votes: { requestId, up: vote.up } });
+}
+
+/** End the backend session. The local vault is not affected. */
+async function signOutRoute(request, env, store) {
+  if (request.method !== "POST") {
+    return problem(405, "method_not_allowed", "Use POST to sign out.", { allow: "POST" });
+  }
+  const value = readCookie(request.headers.get("cookie"), BACKEND_COOKIE);
+  const id = value === null ? null : await readSession(value, saltOf(env));
+  if (id !== null) {
+    await store.endSession(id);
+  }
+  return json(200, { ok: true }, { "set-cookie": `${BACKEND_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0` });
 }
 
 async function votesRoute(request, env, store) {
@@ -487,13 +674,22 @@ async function votesRoute(request, env, store) {
 }
 
 async function rolesRoute(request, env, store) {
-  if (request.method !== "POST") {
-    return problem(405, "method_not_allowed", "Use POST for a role change.", { allow: "POST" });
-  }
   const actor = await signedIn(request, env, store);
   const actorRow = actor === null ? null : await store.accountByName(actor);
   if (actorRow === null) {
     return problem(401, "backend_sign_in", SIGN_IN_FIRST);
+  }
+  if (request.method === "GET") {
+    if (actorRow.role !== "owner" && actorRow.role !== "admin") {
+      return problem(403, "role_forbidden", "Your role cannot read the role list.");
+    }
+    const accounts = await store.listAccounts();
+    return json(200, { accounts: accounts.map((row) => ({ username: row.username, role: row.role })) });
+  }
+  if (request.method !== "POST") {
+    return problem(405, "method_not_allowed", "Use GET or POST for a role change.", {
+      allow: "GET, POST",
+    });
   }
   const read = await readBody(request);
   if (read.refusal) {
@@ -529,10 +725,16 @@ export async function routeWithStore(request, env, pathname, store) {
   switch (pathname) {
     case "/api/backend/account":
       return accountRoute(request, env, store, url);
+    case "/api/backend/sign-out":
+      return signOutRoute(request, env, store);
     case "/api/backend/tools":
       return toolsRoute(request, env, store);
     case "/api/backend/requests":
       return requestsRoute(request, env, store);
+    case "/api/backend/request-status":
+      return requestStatusRoute(request, env, store);
+    case "/api/backend/request-votes":
+      return requestVotesRoute(request, env, store);
     case "/api/backend/votes":
       return votesRoute(request, env, store);
     case "/api/backend/roles":
@@ -546,7 +748,10 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS backend_accounts (username TEXT PRIMARY KEY, role TEXT NOT NULL, password TEXT NOT NULL, created_at TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS backend_sessions (id TEXT PRIMARY KEY, username TEXT NOT NULL, expires INTEGER NOT NULL)",
   "CREATE TABLE IF NOT EXISTS backend_tools (id TEXT PRIMARY KEY, name TEXT NOT NULL, publisher TEXT NOT NULL, risk TEXT NOT NULL, description TEXT NOT NULL, created_at TEXT NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS backend_tool_data (tool_id TEXT PRIMARY KEY, definition TEXT, permissions TEXT NOT NULL, version INTEGER NOT NULL, tags TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS backend_requests (id TEXT PRIMARY KEY, username TEXT NOT NULL, title TEXT NOT NULL, detail TEXT NOT NULL, created_at TEXT NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS backend_request_meta (request_id TEXT PRIMARY KEY, status TEXT NOT NULL, status_reason TEXT NOT NULL, duplicate_of TEXT)",
+  "CREATE TABLE IF NOT EXISTS backend_request_votes (username TEXT NOT NULL, request_id TEXT NOT NULL, up INTEGER NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (username, request_id))",
   "CREATE TABLE IF NOT EXISTS backend_votes (username TEXT NOT NULL, tool_id TEXT NOT NULL, up INTEGER NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (username, tool_id))",
 ];
 
@@ -597,18 +802,20 @@ export function d1Store(db) {
     setRole: (username, role) => run("UPDATE backend_accounts SET role = ? WHERE username = ?", role, username),
     ownerCount: async () =>
       Number((await first("SELECT COUNT(*) AS n FROM backend_accounts WHERE role = 'owner'"))?.n ?? 0),
+    listAccounts: () => all("SELECT username, role FROM backend_accounts ORDER BY created_at ASC"),
     createSession: ({ id, username, expires }) =>
       run("INSERT INTO backend_sessions (id, username, expires) VALUES (?, ?, ?)", id, username, expires),
+    endSession: (id) => run("DELETE FROM backend_sessions WHERE id = ?", id),
     sessionOwner: async (id, now) =>
       (await first("SELECT username FROM backend_sessions WHERE id = ? AND expires > ?", id, now))?.username ??
       null,
     listTools: (limit) =>
       all(
-        "SELECT id, name, publisher, risk, description, created_at FROM backend_tools ORDER BY created_at DESC LIMIT ?",
+        "SELECT t.id, t.name, t.publisher, t.risk, t.description, t.created_at, d.definition, d.permissions, d.version, d.tags FROM backend_tools t LEFT JOIN backend_tool_data d ON d.tool_id = t.id ORDER BY t.created_at DESC LIMIT ?",
         limit,
       ),
-    createTool: ({ id, name, publisher, risk, description, createdAt }) =>
-      run(
+    createTool: async ({ id, name, publisher, risk, description, createdAt, permissions, version, tags, definition }) => {
+      await run(
         "INSERT INTO backend_tools (id, name, publisher, risk, description, created_at) VALUES (?, ?, ?, ?, ?, ?)",
         id,
         name,
@@ -616,16 +823,63 @@ export function d1Store(db) {
         risk,
         description,
         createdAt,
-      ),
-    createRequest: ({ id, username, title, detail, createdAt }) =>
-      run(
+      );
+      await run(
+        "INSERT INTO backend_tool_data (tool_id, definition, permissions, version, tags) VALUES (?, ?, ?, ?, ?)",
+        id,
+        definition === null ? null : JSON.stringify(definition),
+        JSON.stringify(permissions ?? []),
+        version ?? 1,
+        JSON.stringify(tags ?? []),
+      );
+    },
+    createRequest: async ({ id, username, title, detail, createdAt }) => {
+      await run(
         "INSERT INTO backend_requests (id, username, title, detail, created_at) VALUES (?, ?, ?, ?, ?)",
         id,
         username,
         title,
         detail,
         createdAt,
+      );
+      await run(
+        "INSERT INTO backend_request_meta (request_id, status, status_reason, duplicate_of) VALUES (?, 'open', '', NULL)",
+        id,
+      );
+    },
+    listRequests: (limit, viewer) =>
+      all(
+        "SELECT r.id, r.username, r.title, r.detail, r.created_at, m.status, m.status_reason, m.duplicate_of, (SELECT COUNT(*) FROM backend_request_votes v WHERE v.request_id = r.id AND v.up = 1) AS votes, EXISTS(SELECT 1 FROM backend_request_votes v WHERE v.request_id = r.id AND v.username = ? AND v.up = 1) AS voted FROM backend_requests r LEFT JOIN backend_request_meta m ON m.request_id = r.id ORDER BY votes DESC, r.created_at DESC LIMIT ?",
+        viewer ?? "",
+        limit,
       ),
+    setRequestStatus: async (id, status, reason) => {
+      const row = await first("SELECT id FROM backend_requests WHERE id = ?", id);
+      if (row === null) {
+        return false;
+      }
+      await run(
+        "INSERT INTO backend_request_meta (request_id, status, status_reason, duplicate_of) VALUES (?, ?, ?, NULL) ON CONFLICT(request_id) DO UPDATE SET status = excluded.status, status_reason = excluded.status_reason",
+        id,
+        status,
+        reason,
+      );
+      return true;
+    },
+    setRequestVote: async ({ username, requestId, up, createdAt }) => {
+      const row = await first("SELECT id FROM backend_requests WHERE id = ?", requestId);
+      if (row === null) {
+        return false;
+      }
+      await run(
+        "INSERT INTO backend_request_votes (username, request_id, up, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(username, request_id) DO UPDATE SET up = excluded.up, created_at = excluded.created_at",
+        username,
+        requestId,
+        up ? 1 : 0,
+        createdAt,
+      );
+      return true;
+    },
     saveVote: ({ username, toolId, up, createdAt }) =>
       run(
         "INSERT INTO backend_votes (username, tool_id, up, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(username, tool_id) DO UPDATE SET up = excluded.up, created_at = excluded.created_at",

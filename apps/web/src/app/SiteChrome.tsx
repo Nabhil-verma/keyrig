@@ -9,6 +9,8 @@ import { Icon } from "../components/ui/Icon";
 
 const PUBLIC_LINKS: ReadonlyArray<{ to: Route; label: string }> = [
   { to: "/providers", label: "Providers" },
+  { to: "/marketplace", label: "Marketplace" },
+  { to: "/requests", label: "Requests" },
   { to: "/security", label: "Security" },
   { to: "/settings", label: "Settings" },
 ];
@@ -95,6 +97,8 @@ export function SiteFooter() {
       </span>
       <span className="footer-links">
         <Link to="/providers">Providers</Link>
+        <Link to="/marketplace">Marketplace</Link>
+        <Link to="/requests">Requests</Link>
         <Link to="/security">Security</Link>
         <Link to="/settings">Settings</Link>
         <Link to="/app">App</Link>

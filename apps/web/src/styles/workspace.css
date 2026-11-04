@@ -1051,3 +1051,464 @@
 .scene-save {
   margin-left: auto;
 }
+
+/* ==========================================================================
+   Phase 1: the Home dashboard
+   Six cards with clear groups, big type and room to breathe.
+   Amber marks a key. Cyan marks the AI link. Nothing swaps them.
+   ========================================================================== */
+.dash {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 30px clamp(18px, 3vw, 44px) 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.dash-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 0 4px;
+}
+
+.dash-hero h1 {
+  margin: 0;
+  font-size: clamp(32px, 4.2vw, 54px);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+  font-weight: 820;
+}
+
+.dash-hero p {
+  margin: 0;
+  max-width: 58ch;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dash-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 216px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, var(--surface-2), var(--surface));
+  overflow: hidden;
+  animation: dash-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.dash-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(130% 90% at 100% 0%, var(--spot), transparent 62%);
+  pointer-events: none;
+}
+
+.dash-card--wide {
+  grid-column: 1 / -1;
+  min-height: 0;
+}
+
+.dash-card > * {
+  position: relative;
+}
+
+.dash-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.dash-card-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface-3);
+  color: var(--text-soft);
+}
+
+.dash-card-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+
+.dash-card-head p {
+  margin: 2px 0 0;
+  max-width: 52ch;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.dash-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.dash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dash-row,
+.dash-key,
+.dash-arena {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+
+.dash-row {
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.dash-row:hover {
+  border-color: var(--line);
+  background: var(--surface-3);
+}
+
+.dash-row:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 1px;
+}
+
+.dash-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dash-row-main strong {
+  font-size: 12.5px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-row-main em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-row-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  flex: none;
+  color: var(--text-soft);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+}
+
+.dash-row-meta small {
+  color: var(--muted);
+  font-size: 9.5px;
+}
+
+.dash-quick {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dash-quick-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    transform 0.18s ease,
+    background 0.18s ease;
+}
+
+.dash-quick-item:hover {
+  border-color: var(--state-line-cyan);
+  background: var(--surface-3);
+  transform: translateY(-2px);
+}
+
+.dash-quick-item:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.dash-quick-item > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.dash-quick-item strong {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dash-quick-item em {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.dash-quick-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 8px;
+  border: 1px solid var(--amber-line);
+  background: var(--amber-soft);
+  color: var(--amber-text);
+}
+
+.dash-quick-item > svg {
+  color: var(--muted);
+  flex: none;
+}
+
+.dash-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.dash-empty {
+  margin: 0;
+  padding: 12px 2px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+  max-width: 46ch;
+}
+
+.dash-cost {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.dash-cost-total {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: clamp(26px, 3vw, 34px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--amber-text);
+}
+
+.dash-cost-note {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.dash-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 74px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dash-bars li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.dash-bar {
+  display: block;
+  width: 100%;
+  max-width: 26px;
+  min-height: 4px;
+  border-radius: 4px 4px 2px 2px;
+  background: linear-gradient(180deg, var(--cyan), var(--cyan-soft));
+  border: 1px solid var(--cyan-line);
+}
+
+.dash-bars small {
+  color: var(--muted);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+}
+
+.dash-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-skeleton > span:not(.visually-hidden) {
+  display: block;
+  height: 16px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-3), var(--surface-2), var(--surface-3));
+  background-size: 200% 100%;
+  animation: dash-shimmer 1.4s linear infinite;
+}
+
+.dash-skeleton > span:nth-child(2) {
+  width: 88%;
+}
+
+.dash-skeleton > span:nth-child(3) {
+  width: 64%;
+}
+
+.dash-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.dash-error p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+@keyframes dash-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dash-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (max-width: 980px) {
+  .dash-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dash-quick {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .dash-quick {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-card,
+  .dash-skeleton > span:not(.visually-hidden) {
+    animation: none;
+  }
+
+  .dash-quick-item {
+    transition: none;
+  }
+}
+
+/* Phase 6: the streak card. No guilt, no gold star, just the count. */
+.dash-streak {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-top: 2px;
+}
+
+.dash-streak-number {
+  font-size: 46px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  color: var(--cyan-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-streak-unit {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-soft);
+}
+
+.dash-streak-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  width: 100%;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: 11px;
+}

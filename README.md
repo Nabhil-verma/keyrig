@@ -42,6 +42,10 @@ Phase 3 is partly built. It covers the agent loop, the tool set, the approval ca
 workspace, the 3D scene and the two profile connections. The artifact canvas and chat checkpoints are
 not built yet.
 
+Phases 3 to 6 of the eight-feature brief are complete. Phase 3 adds the optional shared account and its
+roles. Phase 4 adds the marketplace. Phase 5 adds the feature requests. Phase 6 adds the streak. The
+owner removed Phase 7, so the Feature Scout and `/scout` are not built (D-17).
+
 ---
 
 ## Features
@@ -75,18 +79,29 @@ not built yet.
 - **Lock on sign-out.** Sign-out locks the vault. It drops the decrypted keys from memory and stops any stream.
 - **Roles.** The first account on the device is the owner. An owner or an admin grants a role. Each protected
   feature checks a permission key, not a role name. See [docs/RBAC.md](docs/RBAC.md).
+- **A shared account.** The optional backend keeps the account name and the role for the marketplace and
+  the feature requests. It uses its own password, never the vault passphrase, and it receives no key,
+  chat, cost or streak (PR-01, PR-05).
+- **A marketplace.** Publish one local tool. The item holds the code and the permissions, never a key. An
+  install shows the same warning as a local tool and starts off.
+- **Feature requests.** Send one request, vote once and follow the status. Without the backend the list
+  stays on this device.
+- **A streak.** A run of local days with at least one answer. The record stays on this device and a missed
+  day ends the run. The best run stays.
 
 ---
 
 ## The web app
 
-The web app has four pages. Unknown paths show a not-found page.
+The web app has six pages. Unknown paths show a not-found page.
 
 | Path | Page | What it shows |
 |---|---|---|
 | `/` | Home | The product, the routing visual, the features, the steps and a call to action. |
 | `/providers` | Providers | Each built-in provider, its auth type, its wire format, its base URL and its abilities. |
 | `/security` | Security | The product rules and the key vault rules. |
+| `/marketplace` | Marketplace | The published tools, the publish form and the install warning. |
+| `/requests` | Requests | The feature requests, the votes and the status. |
 | `/app` | Workspace | Sign-in, the key vault, the route (model and key), chat and the arena. |
 
 The workspace stays loaded while you read the public pages. Your session and your chat stay in memory.
@@ -174,7 +189,7 @@ keyrig code/
 │       ├── public/             Brand files and fonts
 │       └── src/
 │           ├── app/            The shell: the entry, the routes and the page host
-│           ├── pages/          The four public pages
+│           ├── pages/          The six public pages
 │           ├── components/     The workspace panels, cards and drawers
 │           │   └── ui/         The brand marks and the icon set
 │           ├── stores/         Saved state in this browser
@@ -322,6 +337,7 @@ a secure context. The localhost address counts as secure. Other plain HTTP addre
 - The artifact canvas and chat checkpoints (Phase 3 and 4).
 - A shell or a run-command tool. keyrig runs in a browser, so it has no process to start.
 - Rule files for the agent (AS-08), tool hooks (AS-07) and the `@` and `/` context shortcuts (CX-04).
+- Phase 7, the Feature Scout and the `/scout` route. The owner removed Phase 7 on 2026-11-04 (D-17).
 - The `doctor` command and the CLI (KS-08, KS-09).
 
 ---

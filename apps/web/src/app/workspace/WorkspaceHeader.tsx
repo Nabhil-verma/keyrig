@@ -2,7 +2,7 @@ import { formatUsd } from "@keyrig/providers";
 import { BrandLockup } from "../../components/ui/BrandLockup";
 import { Icon } from "../../components/ui/Icon";
 
-type WorkspaceView = "chat" | "arena";
+type WorkspaceView = "home" | "chat" | "arena";
 
 interface WorkspaceHeaderProps {
   username: string;
@@ -38,6 +38,16 @@ export function WorkspaceHeader({
       </span>
 
       <div className="ws-top-tabs" role="tablist" aria-label="View">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "home"}
+          className="ws-top-tab"
+          onClick={() => onView("home")}
+        >
+          <Icon name="home" size={13} />
+          Home
+        </button>
         <button
           type="button"
           role="tab"

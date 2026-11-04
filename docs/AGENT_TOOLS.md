@@ -52,6 +52,79 @@ keyrig checks every call against the tool schema. An unknown field, a missing fi
 an oversized value is an error. The model reads the message and can correct the call.
 A tool result states `ok`, a short `summary` and the data. A long result is cut, and the summary says so.
 
+## The local tool system (Phase 2)
+
+The tool list above is the built-in agent tool set. The local tool system adds tools that a person
+makes, imports or edits. The code is in [packages/core/src/agent/](../packages/core/src/agent/).
+
+### One tool type
+
+A tool holds these fields:
+
+| Field | Meaning |
+|---|---|
+| `id` | A stable id. A built-in tool keeps its id after a reset. |
+| `name` | The name that the model reads. |
+| `description` | One sentence for the model. |
+| `inputSchema` | A strict JSON schema. An unknown field stops the call (MC-05). |
+| `permissions` | `none`, `network`, `files` or `run-code`. |
+| `source` | `built-in`, `user` or `marketplace`. |
+| `version` | A number. An edit or a permission change makes a new version. |
+| `script` | The body of the sandbox function. |
+
+### Premade tools and copies
+
+keyrig ships four premade tools: `text_stats`, `slugify`, `json_format` and `count_lines`. A premade
+tool is a frozen constant. **Edit a copy** makes a record with the origin id. **Reset** drops the copy,
+so the original returns. keyrig never changes a premade tool in place.
+
+### The warning (required)
+
+Before a person creates, imports, enables or changes a tool, keyrig shows one warning card. The card
+states:
+
+1. what the tool can do;
+2. each permission that the tool asks for;
+3. that tool code can read data and run actions.
+
+The confirm button stays disabled until the person marks the box. The registry also needs
+`acknowledged: true`, so a caller cannot skip the warning. When the permissions or the script change,
+the run approval clears and the card comes again.
+
+### The sandbox
+
+A tool runs in a fresh Web Worker. The worker has its own global scope, so it cannot reach the vault,
+the keys or the passphrase in the app thread (PR-01). The message holds the script, the input, the
+permissions and, only with the files permission, a workspace snapshot.
+
+- A tool with no `network` permission gets a `fetch` that stops the call.
+- A tool with no `files` permission gets no workspace text.
+- The global storage objects and the worker start calls stop the call.
+- The timeout is 4 seconds.
+- The output limit is 20,000 characters.
+
+A tool never runs for the first time without an approval. A run needs `approved: true`, and the
+registry keeps the approved fingerprint of the exact code.
+
+### The marketplace (Phase 4)
+
+A person can publish one local tool to the optional backend. The item holds the name, the description,
+the permissions, the version, the tags and the definition. It holds no key, no tool input, no chat and
+no cost (PR-01, PR-05). The browser runs `publishProblem` before the item leaves, and the Worker runs
+the same scan again.
+
+Anyone can read the list. **Install** shows the same warning card as a local tool, then
+`ToolRegistry.importTool` adds a copy with `source: "marketplace"`. The copy is off and needs an
+approval before the first run (AS-01). An entry without a definition cannot be installed (MC-05).
+
+### Tests
+
+- `packages/core/src/tests/toolRegistry.test.ts`: MC-02 (reset), AS-01 (the warning and a permission
+  change), PR-01 (a key in a tool) and MC-05 (a strict schema).
+- `packages/core/src/tests/toolRunner.test.ts`: PR-01 (no key in the worker message), AS-01 (no run
+  without approval) and PR-04 (the timeout, the output limit and a crash).
+- `packages/core/src/tests/toolDraft.test.ts`: AS-01 (the draft waits for review) and the diff.
+
 ## The agent loop
 
 The loop lives in `packages/core/src/agent.ts`. It runs at most 8 steps. The limits are in

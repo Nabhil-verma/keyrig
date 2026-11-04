@@ -30,8 +30,39 @@ The owner answered the open questions in section 7 of the reference spec on 2026
 
 ## D-07 (2026-11-04)
 
-keyrig has an optional backend on freebuff. It is used only for accounts, roles, the marketplace, and
-feature requests. Local mode stays complete and works offline. The default is local mode.
+keyrig gets an optional backend on freebuff. Accounts, roles, marketplace, and feature requests need it.
+Local mode stays complete. The default is local mode.
+
+D-07 replaces D-04 and D-06 for these four features only. It does not change the key path, the hosted
+model or the local records.
+
+### What the backend can store
+
+The backend stores one row for each item in this table. Each row belongs to one account.
+
+| Item | The fields that the backend can store |
+|---|---|
+| Account | The account name, the password salt and hash, the creation date and the last sign-in date. |
+| Role | The account name, the role id and the date of the change. |
+| Published tool | The name, the description, the permissions, the version, the author, the tags, the tool definition and the install count. |
+| Feature request | The title, the description, the category, the status, the status reason, the vote count and the duplicate mark. |
+| Vote | The account name, the item id and the date. |
+| Moderation log | The actor, the action, the item id and the date. |
+
+The password row holds only a PBKDF2-SHA-256 salt and hash. The backend never stores the password.
+
+### What the backend can never store
+
+- A provider key, a key fragment, a passphrase or a request header.
+- A chat, a prompt, a response or a chat title.
+- A cost, a usage record, a spend total or a streak.
+- A workspace file or a tool argument.
+- A local path or a file name from the device.
+- A telemetry event of any kind (PR-05).
+
+The request allowlist in [packages/shared/src/backend.ts](../packages/shared/src/backend.ts) keeps four
+fields: `account`, `publishedTools`, `featureRequests` and `votes`. The Worker refuses any other field and
+any key-like value in [sites-preview/backend.mjs](../sites-preview/backend.mjs).
 
 ### Consequences
 
@@ -42,3 +73,22 @@ feature requests. Local mode stays complete and works offline. The default is lo
 - The key path does not change. No key reaches the backend, a tool or a published item (PR-01).
 - The routes live at `/api/backend/*` on the same Worker. They refuse every call with a 503 when the
   site has no database binding, so local mode and the hosted model do not depend on them.
+- The backend is optional. An account, a tool and a feature request also work as a local record. A person
+  who never signs in to the backend sees the full product.
+
+### The store of each item
+
+| Item | Local mode | Backend mode |
+|---|---|---|
+| Account and role | Browser storage | The account row and the role row |
+| Tool | Browser storage | The published tool rows and the local copy |
+| Feature request | Browser storage | The request rows and the local copy |
+| Vote | Browser storage | The vote rows and the local copy |
+
+See [SECURITY.md](SECURITY.md) for the route list and the enforcement notes.
+
+## D-17 Phase 7 is removed (2026-11-04)
+
+The owner removed Phase 7 from the brief. keyrig does not build the Feature Scout, the `/scout` route
+or the ranked backlog, and no building starts without an approval in any case. Phase 6 is the last
+phase of this brief. There is no route, no store and no test for Phase 7.

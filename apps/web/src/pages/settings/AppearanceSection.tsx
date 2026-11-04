@@ -69,6 +69,37 @@ export function AppearanceSection() {
           { value: "compact", label: "Compact" },
         ]}
       />
+      <Segmented
+        label="Font size"
+        value={settings.fontSize}
+        onChange={(fontSize) => writeSettings({ fontSize })}
+        options={[
+          { value: "small", label: "Small" },
+          { value: "medium", label: "Medium" },
+          { value: "large", label: "Large" },
+        ]}
+      />
+      <Segmented
+        label="Layout width"
+        value={settings.layoutWidth}
+        onChange={(layoutWidth) => writeSettings({ layoutWidth })}
+        options={[
+          { value: "cozy", label: "Cozy" },
+          { value: "wide", label: "Wide" },
+        ]}
+      />
+      <Segmented
+        label="Accent contrast"
+        value={settings.accentContrast}
+        onChange={(accentContrast) => writeSettings({ accentContrast })}
+        options={[
+          { value: "normal", label: "Normal" },
+          { value: "high", label: "High" },
+        ]}
+      />
+      <p className="hint">
+        A high contrast makes the amber and cyan lines stronger. It does not change their meaning.
+      </p>
 
       <div className="field">
         <label htmlFor="accent">Accent</label>
@@ -92,7 +123,7 @@ export function AppearanceSection() {
         </div>
         <p className="hint">
           The brand kit gives amber to the key and cyan to the AI link. A custom accent replaces amber on both
-          themes.
+          themes. Cyan stays cyan.
         </p>
       </div>
     </Section>

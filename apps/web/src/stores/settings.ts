@@ -12,12 +12,21 @@ import { browserStorage } from "../lib/storage";
 type ThemeChoice = "dark" | "light" | "system";
 type MotionChoice = "full" | "reduced";
 type DensityChoice = "comfortable" | "compact";
+type ContrastChoice = "normal" | "high";
+type FontSizeChoice = "small" | "medium" | "large";
+type LayoutChoice = "cozy" | "wide";
 
 interface AppSettings {
   theme: ThemeChoice;
   motion: MotionChoice;
   density: DensityChoice;
   accent: string | null;
+  /** A stronger line and label colour. It does not swap amber and cyan. */
+  accentContrast: ContrastChoice;
+  fontSize: FontSizeChoice;
+  layoutWidth: LayoutChoice;
+  /** The name that the dashboard greets. It stays on this device. */
+  displayName: string;
   rememberRoute: boolean;
   /** AS-06: the user block of the guard prompt. The core caps the length. */
   instructions: string;
@@ -34,6 +43,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   motion: "full",
   density: "comfortable",
   accent: null,
+  accentContrast: "normal",
+  fontSize: "medium",
+  layoutWidth: "cozy",
+  displayName: "",
   rememberRoute: true,
   instructions: "",
   dailyBudgetUsd: null,
@@ -42,6 +55,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 const ACCENT_PATTERN = /^#[0-9a-f]{6}$/i;
 const MAX_DISABLED = 50;
+export const DISPLAY_NAME_LIMIT = 40;
 
 const storage = browserStorage();
 const listeners = new Set<() => void>();
@@ -60,6 +74,26 @@ function isDensity(value: unknown): value is DensityChoice {
   return value === "comfortable" || value === "compact";
 }
 
+function isContrast(value: unknown): value is ContrastChoice {
+  return value === "normal" || value === "high";
+}
+
+function isFontSize(value: unknown): value is FontSizeChoice {
+  return value === "small" || value === "medium" || value === "large";
+}
+
+function isLayout(value: unknown): value is LayoutChoice {
+  return value === "cozy" || value === "wide";
+}
+
+/** A name for the greeting. It holds no key and no long text. */
+function normalizeDisplayName(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.replace(/[\r\n]+/g, " ").trim().slice(0, DISPLAY_NAME_LIMIT);
+}
+
 /** Keep only known values. A broken field falls back to its default. */
 export function normalizeSettings(input: Partial<AppSettings> | null, fallbackTheme: Theme = "dark"): AppSettings {
   const source = input ?? {};
@@ -72,6 +106,10 @@ export function normalizeSettings(input: Partial<AppSettings> | null, fallbackTh
     motion: isMotion(source.motion) ? source.motion : DEFAULT_SETTINGS.motion,
     density: isDensity(source.density) ? source.density : DEFAULT_SETTINGS.density,
     accent,
+    accentContrast: isContrast(source.accentContrast) ? source.accentContrast : DEFAULT_SETTINGS.accentContrast,
+    fontSize: isFontSize(source.fontSize) ? source.fontSize : DEFAULT_SETTINGS.fontSize,
+    layoutWidth: isLayout(source.layoutWidth) ? source.layoutWidth : DEFAULT_SETTINGS.layoutWidth,
+    displayName: normalizeDisplayName(source.displayName),
     rememberRoute: typeof source.rememberRoute === "boolean" ? source.rememberRoute : DEFAULT_SETTINGS.rememberRoute,
     instructions: normalizeInstructionText(source.instructions),
     dailyBudgetUsd: normalizeBudgetLimit(source.dailyBudgetUsd),
@@ -170,7 +208,7 @@ function resolvedTheme(choice: ThemeChoice): Theme {
     : "dark";
 }
 
-function applyAccent(accent: string | null): void {
+function applyAccent(accent: string | null, contrast: ContrastChoice): void {
   const root = document.documentElement;
   const names = ["--amber", "--amber-strong", "--amber-soft", "--amber-line", "--amber-text"];
   if (accent === null) {
@@ -179,10 +217,12 @@ function applyAccent(accent: string | null): void {
     }
     return;
   }
+  const line = contrast === "high" ? 64 : 34;
+  const soft = contrast === "high" ? 18 : 12;
   root.style.setProperty("--amber", accent);
   root.style.setProperty("--amber-strong", `color-mix(in srgb, ${accent} 82%, #000)`);
-  root.style.setProperty("--amber-soft", `color-mix(in srgb, ${accent} 12%, transparent)`);
-  root.style.setProperty("--amber-line", `color-mix(in srgb, ${accent} 34%, transparent)`);
+  root.style.setProperty("--amber-soft", `color-mix(in srgb, ${accent} ${soft}%, transparent)`);
+  root.style.setProperty("--amber-line", `color-mix(in srgb, ${accent} ${line}%, transparent)`);
   root.style.setProperty("--amber-text", accent);
 }
 
@@ -193,7 +233,10 @@ export function applySettings(settings: AppSettings): void {
   root.dataset.theme = theme;
   root.dataset.motion = settings.motion;
   root.dataset.density = settings.density;
-  applyAccent(settings.accent);
+  root.dataset.accentContrast = settings.accentContrast;
+  root.dataset.fontSize = settings.fontSize;
+  root.dataset.layoutWidth = settings.layoutWidth;
+  applyAccent(settings.accent, settings.accentContrast);
   try {
     storage.setItem(THEME_KEY, theme);
   } catch {

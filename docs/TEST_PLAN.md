@@ -78,6 +78,30 @@ The tests need no key and no network. Run `npm test`.
 | D-07 the backend is off without a database | `sites-preview/backend.test.mjs`: "refuses every call when the site has no database" |
 | D-07 accounts and roles on the backend | `sites-preview/backend.test.mjs`: "makes the first account the owner and the next account a viewer"; "lets an owner change a role and refuses a change of your own role" |
 
+## Accounts, marketplace, requests and streaks (2026-11-04)
+
+| Rule | Test |
+|---|---|
+| D-07 the backend client sends one account field | `apps/web/src/services/backendClient.test.ts`: "sends one account field and no key" |
+| PR-01 a key as the community password is refused before the request | `backendClient.test.ts`: "refuses a password that looks like a provider key before the request" |
+| PR-04 a backend error is clear | `backendClient.test.ts`: "keeps the status, the code and the message" |
+| D-07 a backend without a database reads as off | `backendClient.test.ts`: "marks a site without a database binding as off" |
+| D-07 the owner reads the shared role list | `sites-preview/backend.test.mjs`: "lets the owner read the role list and refuses a viewer" |
+| D-07 a sign-out ends only the shared session | `backend.test.mjs`: "ends the backend session on sign-out and keeps the local account" |
+| PR-01 a published tool holds no key | `apps/web/src/lib/marketplace.test.ts`: "refuses a tool whose script holds a key"; `backend.test.mjs`: "refuses a tool definition that holds a key" |
+| MC-05 an install needs a full definition | `marketplace.test.ts`: "refuses an entry with no code" |
+| AS-01 a marketplace install starts off and asks before a run | `packages/core/src/tests/toolRegistry.test.ts`: "never runs an imported tool on its own" |
+| D-07 a feature request works without the backend | `apps/web/src/stores/featureRequests.test.ts`: "saves a request and reads it back" |
+| PR-04 a short request title is refused | `featureRequests.test.ts`: "refuses a title of two characters" |
+| PR-05 the local request holds no private data | `featureRequests.test.ts`: "holds no key, chat, cost or streak field" |
+| D-07 a request gets votes and a status | `sites-preview/backend.test.mjs`: "lists a request with its votes and stores a status with a reason" |
+| AC-04 a viewer cannot change a request status | the same backend test |
+| Phase 6 a streak is a run of local days | `apps/web/src/lib/streak.test.ts`: "counts three days in a row and keeps the best"; "ends the run after a missed day" |
+| PR-05 the streak stays on the device | `streak.test.ts`: "writes one device record with days and a best count only" |
+| Phase 6 the dashboard reads and shows the streak | `dashboard.test.ts`: "returns the streak with the account chats"; `e2e/pages.spec.ts`: "the dashboard shows the streak of this device" |
+| D-07 a static host without the backend reads as off | `backendClient.test.ts`: "reads a page answer as the backend being off" |
+| Phase 4 and 5 the new pages work without the backend | `e2e/pages.spec.ts`: "the marketplace and the requests pages work without the backend" |
+
 ## Architecture and tests
 
 | Rule | Test |

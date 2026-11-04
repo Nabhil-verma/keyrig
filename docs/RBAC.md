@@ -8,6 +8,11 @@ live in browser storage with the accounts. The optional backend on freebuff can 
 its role (D-07). This file describes the keys, the roles and the rules. The code is in
 [packages/core/src/rbac.ts](../packages/core/src/rbac.ts).
 
+Phase 3 adds the shared account. The same four role names apply on the backend, and the owner or an
+admin reads the list at `GET /api/backend/roles` and changes a role at `POST /api/backend/roles`. The
+shared role controls the marketplace publishing, the role list and a request status. It does not
+unlock the local vault, and the vault role does not change the shared role.
+
 ## Permission keys
 
 AC-01: the permission keys are the contract. A feature checks one key. Do not check a role name in a

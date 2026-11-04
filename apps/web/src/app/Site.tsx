@@ -10,6 +10,12 @@ const ProvidersPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("../pages/SettingsPage").then((module) => ({ default: module.SettingsPage })),
 );
+const MarketplacePage = lazy(() =>
+  import("../pages/MarketplacePage").then((module) => ({ default: module.MarketplacePage })),
+);
+const RequestsPage = lazy(() =>
+  import("../pages/RequestsPage").then((module) => ({ default: module.RequestsPage })),
+);
 // The workspace loads on the first visit to /app, then stays mounted.
 const Workspace = lazy(() => import("./WorkspaceScreen"));
 import { Link, useRoute, type Route } from "./router";
@@ -61,6 +67,10 @@ function renderPage(route: Exclude<Route, "/app">) {
       return <SecurityPage />;
     case "/settings":
       return <SettingsPage />;
+    case "/marketplace":
+      return <MarketplacePage />;
+    case "/requests":
+      return <RequestsPage />;
     case "not-found":
       return <NotFoundPage />;
   }

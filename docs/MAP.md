@@ -41,7 +41,7 @@ Each folder has one role. Each test file sits next to the file that it tests.
 src/
 ├── vite-env.d.ts
 ├── app/            The shell: the entry point, the routes and the page host
-├── pages/          The four public pages
+├── pages/          The six public pages
 ├── components/     The workspace panels, cards and the ui/ primitives
 ├── stores/         Saved state in this browser
 ├── services/       Calls that leave the app
@@ -70,6 +70,7 @@ The workspace screen keeps each large part of its layout in one file here.
 | `RoutePopover.tsx` | The route popover with the profile panel. |
 | `Inspector.tsx` | The right column: the outbound facts, the files and the tool record. |
 | `SignedOutStage.tsx` | The stage before sign-in. |
+| `Dashboard.tsx` | The Home dashboard: quick start, recent chats, keys, arena, streak and the week cost. |
 | `useChatTurns.ts` | The chat turns: one answer, one agent turn and the arena run. |
 | `chatTurnHelpers.ts` | The error shape helper and the sent-text filter. |
 
@@ -81,7 +82,9 @@ The workspace screen keeps each large part of its layout in one file here.
 | `ProvidersPage.tsx` | The six built-in providers and their abilities. |
 | `SecurityPage.tsx` | The product rules and the vault rules. |
 | `SettingsPage.tsx` | `/settings`: the page shell and the section list. |
-| `settings/` | One file for each settings section, with `Section.tsx` as the wrapper. |
+| `MarketplacePage.tsx` | `/marketplace`: the published tools, the publish form and the install warning (Phase 4). |
+| `RequestsPage.tsx` | `/requests`: the feature requests, the votes, the status and the local copy (Phase 5). |
+| `settings/` | One file for each settings section, with `Section.tsx` as the wrapper. The sections are Profile, Appearance, Tools, Keys, App, Guardrails, Skills, Connectors and Plugins. |
 
 ### components/
 
@@ -103,6 +106,9 @@ Each component shows one part of the workspace.
 | `SceneView.tsx` | The three.js renderer for a `KeyrigScene`. It loads on demand. |
 | `KeyRigObject.tsx` | The three.js key rig in the landing hero. It loads on demand. |
 | `Shelf.tsx` | The setup drawer with the keys, the profile and the roles. |
+| `BackendPanel.tsx` | The optional shared account: sign-up, sign-in, the role and the role list (D-07, Phase 3). |
+| `ToolStudio.tsx` | The local tool list, the form, the agent draft, the import and the test run. |
+| `ToolWarningDialog.tsx` | The required tool warning with the permission list and the confirm box. |
 | `ToolTrace.tsx` | The record of the tool calls under one answer. |
 | `WorkspacePanel.tsx` | The browser workspace: the file list and the editor. |
 
@@ -123,6 +129,7 @@ Each store saves one record in this browser. Each record has a schema version
 |---|---|
 | `settings.ts` | The theme and the motion choice. It is also the `useSettings` hook. |
 | `toolSettings.ts` | The agent tool switches and the risk acknowledgement. |
+| `toolRegistry.ts` | The tool records of this device: the user tools and the copies of the built-in tools. |
 | `routeStore.ts` | The route: the provider, the model and the key for each mode. |
 | `connections.ts` | The account links: the recovery address, the GitHub repository and the commit rule. |
 | `connectors.ts` | The MCP servers that the user added. |
@@ -131,6 +138,7 @@ Each store saves one record in this browser. Each record has a schema version
 | `threads.ts` | The saved chats. |
 | `workspace.ts` | The files of the browser workspace, with the path guard (AS-02). |
 | `spendStore.ts` | The spend of the current UTC day (CO-02). |
+| `featureRequests.ts` | The local copy of the feature requests and the votes (D-07, Phase 5). |
 
 ### services/
 
@@ -141,6 +149,8 @@ These files talk to something outside the app. They hold no React code.
 | `agentRun.ts` | One agent turn: send the request, read the tools, ask for approval, repeat. |
 | `mcp.ts` | The MCP client: list the tools and call one tool. |
 | `oauth.ts` | The Google ID token and the GitHub device flow. |
+| `backendClient.ts` | The optional backend: the four fields of D-07 and no key (PR-01, PR-05). |
+| `toolSandbox.ts` | The Web Worker for one tool call. It has no access to the vault (PR-01). |
 
 ### lib/
 
@@ -149,6 +159,9 @@ These files are pure helpers. They save nothing and they render nothing.
 | File | What it does |
 |---|---|
 | `composerTokens.ts` | Parse `@` and `/` in the composer and add a file to the prompt (CX-04). |
+| `dashboard.ts` | The pure parts of the Home dashboard: the recent chats, the arena runs and the week cost (CO-02, UX-01). |
+| `marketplace.ts` | The published tool to a definition and the install check (PR-01, MC-05). |
+| `streak.ts` | The local streak record and the run (Phase 6, PR-05). |
 | `deltaBuffer.ts` | Join the stream deltas into one render for each frame (PV-08). |
 | `modelOptions.ts` | Merge the provider list and the catalog into the picker list (PV-11). |
 | `motion.ts` | The shared motion variants and the ease-out curve. |
@@ -223,6 +236,11 @@ package.
 | `agent/tools.ts` | The tool definitions, the risk levels and the protected paths (AS-02, MC-04). |
 | `agent/prompts.ts` | The system prompt and the guard prompt. |
 | `agent/sandbox.ts` | The tool sandbox: the allowed capabilities, with no vault (PR-01). |
+| `agent/toolDefinition.ts` | The tool type, the permissions, the schema check and the warning text (AS-01, MC-05). |
+| `agent/toolCatalog.ts` | The premade built-in tools. A built-in tool is frozen. |
+| `agent/toolRegistry.ts` | The user tools, the copy of a built-in tool, the reset and the approval record. |
+| `agent/toolDraft.ts` | The agent draft from one description and the review diff. |
+| `agent/toolRunner.ts` | The worker runner, the timeout and the output limit (PR-01, PR-04). |
 | `agent/github.ts` | The GitHub commit call and the repository rules. |
 
 ## Where to put a new file
@@ -238,7 +256,7 @@ package.
 | A call to a server or an API | `apps/web/src/services/` | Nothing |
 | A pure helper | `apps/web/src/lib/` | Add a test file next to it |
 | A provider | `packages/providers/src/builtins.ts` | Add one adapter if the wire format is new |
-| A tool | `packages/core/src/tools.ts` | Nothing |
+| A tool | `packages/core/src/agent/toolDefinition.ts` | `toolCatalog.ts` and the test |
 | A rule for every layer | `packages/shared/src/` | Nothing |
 | A check of the repository | `tools/` | `package.json` |
 

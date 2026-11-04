@@ -1,9 +1,10 @@
 import { RISK_LABELS, TOOL_SPECS } from "@keyrig/core";
+import { ToolStudio } from "../../components/ToolStudio";
 import { AGENT_RISK_VERSION, useAgentSettings, writeAgentSettings } from "../../stores/toolSettings";
 import { Section } from "./Section";
 
 /** AS-01, AS-02 and MC-04: the tool list and the risk acknowledgement. */
-export function AgentSection() {
+export function ToolsSection() {
   const settings = useAgentSettings();
   const acknowledged = settings.acknowledgedVersion >= AGENT_RISK_VERSION;
 
@@ -17,9 +18,9 @@ export function AgentSection() {
 
   return (
     <Section
-      id="agent"
-      eyebrow="Agent"
-      title="Coding, files and 3D"
+      id="tools"
+      eyebrow="Tools"
+      title="Tools on this device"
       text="The agent works on a workspace in this browser. It runs only the tools that you turn on, and it asks before a risky call."
     >
       <div className="risk-box">
@@ -116,6 +117,8 @@ export function AgentSection() {
         <strong>The GitHub switch lives in the profile.</strong> A commit needs that switch, a connected account and
         a repository in the workspace. Every commit still asks you.
       </div>
+
+      <ToolStudio />
     </Section>
   );
 }

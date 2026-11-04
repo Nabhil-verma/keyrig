@@ -49,9 +49,14 @@ returns 503, so a site can ship with the backend switched off (local mode is the
 | `/api/backend/account?mode=sign-in` | POST | anyone | The password check and the session cookie. |
 | `/api/backend/account` | GET | signed in | The account name and the role. |
 | `/api/backend/tools` | GET | anyone | The published tools. |
-| `/api/backend/tools` | POST | signed in | One published tool. |
+| `/api/backend/sign-out` | POST | signed in | Ends the session cookie. The local vault is not affected. |
+| `/api/backend/tools` | POST | signed in | One published tool: the name, the permissions, the definition, the tags and the version. |
+| `/api/backend/requests` | GET | anyone | The feature requests with the vote count and the status. |
 | `/api/backend/requests` | POST | signed in | One feature request. |
+| `/api/backend/request-votes` | POST | signed in | One vote on one feature request. |
+| `/api/backend/request-status` | POST | owner or admin | One request status and its reason. |
 | `/api/backend/votes` | POST | signed in | One vote on one tool. |
+| `/api/backend/roles` | GET | owner or admin | The account list and the role of each account. |
 | `/api/backend/roles` | POST | owner or admin | One role change. |
 
 The password row holds a PBKDF2-SHA-256 salt and hash, never the password. The session is the signed
@@ -69,6 +74,8 @@ cookie from `hosted.mjs` under the name `keyrig_backend`.
 - PR-05. The backend receives only the four fields above. It never receives a chat, a prompt, a key,
   cost data, usage data or a streak.
 - PR-05. The streak is a device record. The backend cannot read it and does not hold it.
+- PR-01. The published tool is the code that the person chose. It holds no tool input, no chat and no
+  key. The publish scan refuses the whole item when it finds a key-like string.
 
 ## Tests
 
