@@ -1,5 +1,13 @@
 import { KeyrigError, createDocument, isVersionedDocument, type StorageLike } from "@keyrig/shared";
-import { KeyVault, VAULT_STORAGE_KEY } from "../keys/vault";
+import {
+  KeyVault,
+  MAX_PBKDF2_ITERATIONS,
+  MIN_PBKDF2_ITERATIONS,
+  PBKDF2_ITERATIONS,
+  VAULT_GENERATION_KEY,
+  VAULT_STORAGE_KEY,
+  isSupportedWorkFactor,
+} from "../keys/vault";
 
 /**
  * Username and password accounts on this device.
@@ -76,6 +84,12 @@ export function accountStorage(storage: StorageLike, username: string): StorageL
   };
 }
 
+/** B8: the raw storage keys that a `storage` event reports for one account. */
+export function accountVaultStorageKeys(username: string): { vault: string; generation: string } {
+  const prefix = `keyrig.account.${validateUsername(username)}.`;
+  return { vault: `${prefix}${VAULT_STORAGE_KEY}`, generation: `${prefix}${VAULT_GENERATION_KEY}` };
+}
+
 export function listAccounts(storage: StorageLike): AccountRecord[] {
   let raw: string | null;
   try {
@@ -139,6 +153,48 @@ function isVaultExport(value: unknown): value is VaultExportFile {
   return record.vault.data !== null && typeof record.vault.data === "object" && !Array.isArray(record.vault.data);
 }
 
+/** Backlog #8: the work factor of an import file, as the UI must show it. */
+export interface VaultImportNotice {
+  iterations: number;
+  current: number;
+  /** A warning for an old vault. keyrig upgrades it at unlock. */
+  warning: string | null;
+  /** An error for a count that keyrig refuses. The import does not start. */
+  error: string | null;
+}
+
+/**
+ * Backlog #8: read the work factor of a vault export before the first write.
+ * Returns null when the file is not a keyrig vault export.
+ */
+export function inspectVaultImport(
+  file: unknown,
+  current: number = PBKDF2_ITERATIONS,
+): VaultImportNotice | null {
+  if (!isVaultExport(file)) {
+    return null;
+  }
+  const data = (file.vault as { data?: { iterations?: unknown } }).data;
+  const iterations = data?.iterations;
+  if (!isSupportedWorkFactor(iterations)) {
+    return {
+      iterations: typeof iterations === "number" ? iterations : 0,
+      current,
+      warning: null,
+      error: `This vault uses a work factor of ${String(iterations)}. keyrig accepts ${MIN_PBKDF2_ITERATIONS} to ${MAX_PBKDF2_ITERATIONS}. It will not import this vault.`,
+    };
+  }
+  return {
+    iterations,
+    current,
+    warning:
+      iterations < current
+        ? `This vault uses an older work factor (${iterations}). keyrig will upgrade it to ${current} when you unlock it.`
+        : null,
+    error: null,
+  };
+}
+
 /**
  * Build the export file. It holds the encrypted record, the username and a
  * date. It holds no secret and no password. A wrong password cannot open it.
@@ -197,6 +253,16 @@ export async function importVault(input: {
 
   if (!isVaultExport(input.file)) {
     throw invalid();
+  }
+  // Backlog #8: check the work factor before the first write. An old vault is
+  // allowed, because unlock upgrades it. A count outside the range is refused.
+  const notice = inspectVaultImport(input.file, input.iterations ?? PBKDF2_ITERATIONS);
+  if (notice?.error) {
+    throw KeyrigError.fromCategory("invalid_request", {
+      code: "vault_work_factor_unsupported",
+      message: notice.error,
+      action: "check_settings",
+    });
   }
   let username: string;
   try {

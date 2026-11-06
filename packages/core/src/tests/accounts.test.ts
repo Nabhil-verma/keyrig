@@ -5,6 +5,7 @@ import {
   accountStorage,
   createVaultExport,
   importVault,
+  inspectVaultImport,
   listAccounts,
   normalizeUsername,
   signIn,
@@ -217,6 +218,35 @@ describe("vault export and import", () => {
       }),
     );
     expect(wrongVersion.code).toBe("import_invalid");
+  });
+});
+
+describe("KS-02 backlog #8 the import checks the work factor first", () => {
+  it("warns about an old work factor before the first write", async () => {
+    const source = createMemoryStorage();
+    const alice = await signUp({ ...options(source), username: "alice", password: PASSWORD });
+    await alice.vault.addKey({ label: "work", providerId: "openai", secret: SECRET });
+    const file = createVaultExport({ username: "alice", vault: alice.vault });
+
+    const notice = inspectVaultImport(file, 2000);
+    expect(notice?.iterations).toBe(1000);
+    expect(notice?.error).toBeNull();
+    expect(notice?.warning).toMatch(/upgrade/);
+  });
+
+  it("refuses a count outside the range and writes nothing", async () => {
+    const source = createMemoryStorage();
+    const alice = await signUp({ ...options(source), username: "alice", password: PASSWORD });
+    const file = createVaultExport({ username: "alice", vault: alice.vault }) as {
+      vault: { data: { iterations: number } };
+    };
+    file.vault.data.iterations = 999;
+
+    const target = createMemoryStorage();
+    const error = await failureOf(importVault({ storage: target, file, password: PASSWORD }));
+    expect(error.code).toBe("vault_work_factor_unsupported");
+    expect(listAccounts(target)).toEqual([]);
+    expect(accountStorage(target, "alice").getItem(VAULT_STORAGE_KEY)).toBeNull();
   });
 });
 

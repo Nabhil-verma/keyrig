@@ -1,5 +1,10 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
-import { MAX_VAULT_IMPORT_BYTES, MIN_PASSWORD_LENGTH } from "@keyrig/core";
+import {
+  MAX_VAULT_IMPORT_BYTES,
+  MIN_PASSWORD_LENGTH,
+  inspectVaultImport,
+  type VaultImportNotice,
+} from "@keyrig/core";
 import { isKeyrigError, toKeyrigError, type KeyrigErrorJSON } from "@keyrig/shared";
 import { Icon } from "./ui/Icon";
 
@@ -22,6 +27,8 @@ export function AuthPanel({ onSignUp, onSignIn, onImport }: AuthPanelProps) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  /** Backlog #8: the work factor of the chosen vault, shown before the import. */
+  const [fileNotice, setFileNotice] = useState<VaultImportNotice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -31,11 +38,29 @@ export function AuthPanel({ onSignUp, onSignIn, onImport }: AuthPanelProps) {
     setPassword("");
     setConfirm("");
     setFile(null);
+    setFileNotice(null);
   };
 
   const chooseFile = (event: ChangeEvent<HTMLInputElement>): void => {
-    setFile(event.target.files?.[0] ?? null);
+    const chosen = event.target.files?.[0] ?? null;
+    setFile(chosen);
+    setFileNotice(null);
     setError(null);
+    if (!chosen) {
+      return;
+    }
+    if (chosen.size > MAX_VAULT_IMPORT_BYTES) {
+      setError("The file is too large to be a keyrig vault.");
+      return;
+    }
+    // Read the work factor now, so the person sees it before the first write.
+    void chosen.text().then((text) => {
+      try {
+        setFileNotice(inspectVaultImport(JSON.parse(text)));
+      } catch {
+        setFileNotice(null);
+      }
+    });
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
@@ -53,6 +78,10 @@ export function AuthPanel({ onSignUp, onSignIn, onImport }: AuthPanelProps) {
       if (mode === "import") {
         if (!file) {
           setError("Choose the vault file.");
+          return;
+        }
+        if (fileNotice?.error) {
+          setError(fileNotice.error);
           return;
         }
         if (file.size > MAX_VAULT_IMPORT_BYTES) {
@@ -145,6 +174,15 @@ export function AuthPanel({ onSignUp, onSignIn, onImport }: AuthPanelProps) {
               onChange={chooseFile}
             />
             <p className="hint">The file ends in .json. keyrig reads it here and sends it nowhere.</p>
+            {fileNotice?.error ? (
+              <p className="callout" role="alert">
+                {fileNotice.error}
+              </p>
+            ) : fileNotice?.warning ? (
+              <p className="callout callout--cyan" role="status">
+                {fileNotice.warning}
+              </p>
+            ) : null}
           </div>
         ) : (
           <div className="field">
