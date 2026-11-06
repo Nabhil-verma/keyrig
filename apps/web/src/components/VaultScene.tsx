@@ -144,7 +144,6 @@ export function VaultScene({ onSkip }: { onSkip: () => void }) {
         let frame = 0;
         let running = false;
         let visible = true;
-        let hidden = document.hidden;
         const motionQuery =
           typeof window.matchMedia === "function"
             ? window.matchMedia("(prefers-reduced-motion: reduce)")
@@ -156,8 +155,11 @@ export function VaultScene({ onSkip }: { onSkip: () => void }) {
           mount.dataset.running = String(next);
         };
         const render = (): void => renderer.render(world, camera);
+        // Read the document state each time. A tab that was hidden during load
+        // sends no later event, so a snapshot can leave the scene paused.
         const shouldAnimate = (): boolean =>
-          !disposed && shouldAnimateVaultScene({ reducedMotion: reduced, hidden, visible });
+          !disposed &&
+          shouldAnimateVaultScene({ reducedMotion: reduced, hidden: document.hidden, visible });
 
         const tick = (): void => {
           if (!shouldAnimate()) {
@@ -175,7 +177,11 @@ export function VaultScene({ onSkip }: { onSkip: () => void }) {
         };
 
         const start = (): void => {
-          if (running || !shouldAnimate()) {
+          // A sync while the loop runs must not mark the scene as stopped.
+          if (running) {
+            return;
+          }
+          if (!shouldAnimate()) {
             setRunning(false);
             return;
           }
@@ -199,7 +205,7 @@ export function VaultScene({ onSkip }: { onSkip: () => void }) {
             return;
           }
           stop();
-          if (!hidden) {
+          if (!document.hidden) {
             render();
           }
         };
@@ -209,7 +215,6 @@ export function VaultScene({ onSkip }: { onSkip: () => void }) {
         sync();
 
         const onVisibility = (): void => {
-          hidden = document.hidden;
           sync();
         };
         document.addEventListener("visibilitychange", onVisibility);

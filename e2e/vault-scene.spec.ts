@@ -9,6 +9,10 @@ test("backlog #10 the first-run vault scene renders and the skip stays on this d
   await expect(host.locator("canvas")).toBeVisible();
   await expect(host).not.toHaveAttribute("data-failed", "true");
 
+  // A later sync must not report a running scene as stopped.
+  await page.setViewportSize({ width: 1180, height: 820 });
+  await expect(host).toHaveAttribute("data-running", "true");
+
   // The buffer stays small for an integrated GPU.
   const ratio = await host.locator("canvas").evaluate((item) => {
     const canvas = item as HTMLCanvasElement;
