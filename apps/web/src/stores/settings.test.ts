@@ -25,6 +25,8 @@ describe("the settings keep only known values", () => {
       layoutWidth: "cozy",
       displayName: "",
       rememberRoute: false,
+      autoLockMinutes: 15,
+      lockOnHiddenMinutes: 5,
       instructions: "",
       dailyBudgetUsd: null,
       disabledProviders: ["openai"],
@@ -58,6 +60,14 @@ describe("the settings keep only known values", () => {
     expect(normalizeSettings({ displayName: "  Alex\nSmith  " }).displayName).toBe("Alex Smith");
     expect(normalizeSettings({ displayName: "x".repeat(80) }).displayName).toHaveLength(40);
     expect(normalizeSettings({ displayName: 7 as never }).displayName).toBe("");
+  });
+
+  it("B8 #4 keeps a safe auto-lock choice and drops a bad one", () => {
+    expect(normalizeSettings({ autoLockMinutes: 30 }).autoLockMinutes).toBe(30);
+    expect(normalizeSettings({ autoLockMinutes: null }).autoLockMinutes).toBeNull();
+    expect(normalizeSettings({ autoLockMinutes: 0 }).autoLockMinutes).toBe(15);
+    expect(normalizeSettings({ lockOnHiddenMinutes: 1 }).lockOnHiddenMinutes).toBe(1);
+    expect(normalizeSettings({ lockOnHiddenMinutes: 500 }).lockOnHiddenMinutes).toBe(5);
   });
 
   it("keeps the guard instructions as text and drops a bad budget", () => {

@@ -124,6 +124,104 @@ describe("KS-02 the vault encrypts keys before it saves them", () => {
   });
 });
 
+function storedIterations(storage: ReturnType<typeof createMemoryStorage>): number {
+  const raw = storage.getItem(VAULT_STORAGE_KEY) ?? "{}";
+  return (JSON.parse(raw) as { data: { iterations: number } }).data.iterations;
+}
+
+describe("KS-02 the vault keeps the work factor that opened it", () => {
+  it("opens a vault made with count A in a build with count B and keeps every key operation", async () => {
+    const storage = createMemoryStorage();
+    const older = new KeyVault({ storage, iterations: 1000 });
+    await older.create(PASSPHRASE);
+    const first = await older.addKey({ label: "one", providerId: "openai", secret: SECRET });
+    older.lock();
+
+    const newer = new KeyVault({ storage, iterations: 2000 });
+    await newer.unlock(PASSPHRASE);
+    // The unlock moves an old vault to the current default before the next write.
+    expect(storedIterations(storage)).toBe(2000);
+
+    const replaced = "sk-proj-NEWKEY0123456789abcdefghijklmn";
+    const second = await newer.addKey({
+      label: "two",
+      providerId: "anthropic",
+      secret: "sk-ant-api03-abcdefghijklmnopqrstu",
+    });
+    await newer.markUsed(first.id);
+    await newer.replaceSecret(first.id, replaced);
+    await newer.deleteKey(second.id);
+    newer.lock();
+
+    const again = new KeyVault({ storage, iterations: 2000 });
+    await again.unlock(PASSPHRASE);
+    expect(again.listKeys().map((key) => key.label)).toEqual(["one"]);
+    expect(again.getSecret(first.id)).toBe(replaced);
+    expect(again.getKeyView(first.id)?.lastUsedAt).toBeDefined();
+  });
+
+  it("changePassphrase writes the build default count", async () => {
+    const storage = createMemoryStorage();
+    const older = new KeyVault({ storage, iterations: 1000 });
+    await older.create(PASSPHRASE);
+    await older.addKey({ label: "work", providerId: "openai", secret: SECRET });
+    older.lock();
+
+    const newer = new KeyVault({ storage, iterations: 2000 });
+    await newer.unlock(PASSPHRASE);
+    await newer.changePassphrase(PASSPHRASE, "a new long passphrase");
+    expect(storedIterations(storage)).toBe(2000);
+
+    const again = new KeyVault({ storage, iterations: 2000 });
+    await again.unlock("a new long passphrase");
+    expect(again.listKeys().map((key) => key.label)).toEqual(["work"]);
+  });
+
+  it.each([999, 2_000_001])("refuses a stored work factor of %i instead of falling back", async (iterations) => {
+    const { vault, storage } = await unlockedVault();
+    void vault;
+    const raw = JSON.parse(storage.getItem(VAULT_STORAGE_KEY) ?? "{}");
+    raw.data.iterations = iterations;
+    storage.setItem(VAULT_STORAGE_KEY, JSON.stringify(raw));
+
+    const second = new KeyVault({ storage, iterations: 1000 });
+    await expect(second.unlock(PASSPHRASE)).rejects.toMatchObject({ code: "vault_work_factor_unsupported" });
+  });
+
+  it("still opens an old vault that uses the default count", async () => {
+    const storage = createMemoryStorage();
+    const vault = new KeyVault({ storage });
+    await vault.create(PASSPHRASE);
+    const view = await vault.addKey({ label: "work", providerId: "openai", secret: SECRET });
+    vault.lock();
+
+    const second = new KeyVault({ storage });
+    await second.unlock(PASSPHRASE);
+    expect(second.listKeys().map((key) => key.id)).toEqual([view.id]);
+    expect(storedIterations(storage)).toBe(600_000);
+  });
+});
+
+describe("B8 two tabs cannot overwrite each other", () => {
+  it("refuses a stale write after another tab saved the vault", async () => {
+    const storage = createMemoryStorage();
+    const tabA = new KeyVault({ storage, iterations: 1000 });
+    await tabA.create(PASSPHRASE);
+    const tabB = new KeyVault({ storage, iterations: 1000 });
+    await tabB.unlock(PASSPHRASE);
+
+    await tabA.addKey({ label: "from tab A", providerId: "openai", secret: SECRET });
+    await expect(
+      tabB.addKey({ label: "from tab B", providerId: "openai", secret: "sk-proj-other0123456789abcdefghij" }),
+    ).rejects.toMatchObject({ code: "vault_conflict" });
+
+    tabA.lock();
+    const check = new KeyVault({ storage, iterations: 1000 });
+    await check.unlock(PASSPHRASE);
+    expect(check.listKeys().map((key) => key.label)).toEqual(["from tab A"]);
+  });
+});
+
 describe("KS-04 safe key display", () => {
   it("returns the label and the last four characters only", async () => {
     const { vault } = await unlockedVault();

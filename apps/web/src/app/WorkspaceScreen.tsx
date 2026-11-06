@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AccountRecord,
   AgentApprovalRequest,
@@ -9,6 +9,7 @@ import type {
 } from "@keyrig/core";
 import {
   accountStorage,
+  accountVaultStorageKeys,
   assignRole,
   budgetMessage,
   budgetState,
@@ -51,6 +52,7 @@ import { threadReceiptSvg } from "../lib/receipt";
 import { Icon } from "../components/ui/Icon";
 import { Workspace, type WorkspaceFile } from "../stores/workspace";
 import { browserStorage } from "../lib/storage";
+import { shouldAutoLock } from "../lib/autoLock";
 import { safeError } from "./workspace/chatTurnHelpers";
 import { useChatRoute } from "./workspace/useChatRoute";
 import { useChatThreads } from "./workspace/useChatThreads";
@@ -79,6 +81,8 @@ export default function App() {
   }, [settings.disabledProviders]);
 
   const [session, setSession] = useState<SignedInAccount | null>(null);
+  /** B8: the reason that this tab signed out. */
+  const [lockedNotice, setLockedNotice] = useState<string | null>(null);
   const [keys, setKeys] = useState<KeyView[]>([]);
   const [role, setRole] = useState<RoleId | null>(null);
   const [accounts, setAccounts] = useState<AccountRecord[]>([]);
@@ -98,6 +102,8 @@ export default function App() {
 
   const abortRef = useRef<AbortController | null>(null);
   const approvalRef = useRef<((decision: "approve" | "deny") => void) | null>(null);
+  const lastActivityRef = useRef(Date.now());
+  const hiddenAtRef = useRef<number | null>(null);
 
   const accountStore = useMemo(
     () => (session === null ? null : accountStorage(storage, session.username)),
@@ -325,6 +331,7 @@ export default function App() {
     const store = accountStorage(storage, account.username);
 
     setSession(account);
+    setLockedNotice(null);
     setKeys(deviceKeys);
     setRole(ensureAccountRole({ storage }, account.username));
     setAccounts(listAccounts(storage));
@@ -377,6 +384,83 @@ export default function App() {
     spend.endSession();
   };
 
+  const lockForIdle = (): void => {
+    setLockedNotice("keyrig locked the key vault after a period of no activity. Sign in again to unlock it.");
+    signOut();
+  };
+
+  /** B8: another tab wrote the vault, so this tab must not write its old copy. */
+  useEffect(() => {
+    if (session === null) {
+      return;
+    }
+    const raw = accountVaultStorageKeys(session.username);
+    const onStorage = (event: StorageEvent): void => {
+      if (event.key !== raw.vault && event.key !== raw.generation) {
+        return;
+      }
+      session.vault.lock();
+      setLockedNotice("Another tab changed the key vault. Sign in again to read the newest keys.");
+      signOut();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [session]);
+
+  /** B8 #4: lock after idle time and after the tab stays hidden. */
+  useEffect(() => {
+    if (session === null) {
+      return;
+    }
+    lastActivityRef.current = Date.now();
+    hiddenAtRef.current = document.hidden ? Date.now() : null;
+    const check = (): void => {
+      if (
+        shouldAutoLock({
+          now: Date.now(),
+          lastActivity: lastActivityRef.current,
+          hiddenAt: hiddenAtRef.current,
+          autoLockMinutes: settings.autoLockMinutes,
+          lockOnHiddenMinutes: settings.lockOnHiddenMinutes,
+        })
+      ) {
+        lockForIdle();
+      }
+    };
+    const markActivity = (): void => {
+      lastActivityRef.current = Date.now();
+    };
+    const onVisibility = (): void => {
+      if (document.hidden) {
+        hiddenAtRef.current = Date.now();
+        return;
+      }
+      const hiddenAt = hiddenAtRef.current;
+      hiddenAtRef.current = null;
+      if (
+        shouldAutoLock({
+          now: Date.now(),
+          lastActivity: lastActivityRef.current,
+          hiddenAt,
+          autoLockMinutes: settings.autoLockMinutes,
+          lockOnHiddenMinutes: settings.lockOnHiddenMinutes,
+        })
+      ) {
+        lockForIdle();
+      }
+    };
+    const timer = window.setInterval(check, 15_000);
+    window.addEventListener("pointerdown", markActivity, { passive: true });
+    window.addEventListener("keydown", markActivity);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("pointerdown", markActivity);
+      window.removeEventListener("keydown", markActivity);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [session, settings.autoLockMinutes, settings.lockOnHiddenMinutes]);
+
   /** AC-04: only an account with the roles.assign key changes a role. */
   const changeRole = (target: string, next: RoleId): void => {
     if (!session) {
@@ -409,7 +493,17 @@ export default function App() {
   };
 
   if (session === null) {
-    return <SignedOutStage onSignUp={handleSignUp} onSignIn={handleSignIn} onImport={handleImport} />;
+    return (
+      <>
+        {lockedNotice !== null ? (
+          <div className="ws-warn" role="status">
+            <Icon name="alert" size={12} />
+            {lockedNotice}
+          </div>
+        ) : null}
+        <SignedOutStage onSignUp={handleSignUp} onSignIn={handleSignIn} onImport={handleImport} />
+      </>
+    );
   }
 
   return (

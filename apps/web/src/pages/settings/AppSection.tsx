@@ -2,6 +2,16 @@ import { resetSettings, useSettings, writeSettings } from "../../stores/settings
 import { Icon } from "../../components/ui/Icon";
 import { Section } from "./Section";
 
+const LOCK_CHOICES = [5, 15, 30, 60] as const;
+
+function lockValue(value: number | null): string {
+  return value === null ? "off" : String(value);
+}
+
+function fromLockValue(value: string): number | null {
+  return value === "off" ? null : Number(value);
+}
+
 export function AppSection() {
   const settings = useSettings();
   return (
@@ -25,6 +35,46 @@ export function AppSection() {
           <span className="settings-switch-dot" />
           {settings.rememberRoute ? "On" : "Off"}
         </button>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-copy">
+          <strong>Lock the vault when idle</strong>
+          <p>After this time without a click or a key, keyrig locks the keys and signs out.</p>
+        </div>
+        <select
+          className="select"
+          aria-label="Idle auto-lock"
+          value={lockValue(settings.autoLockMinutes)}
+          onChange={(event) => writeSettings({ autoLockMinutes: fromLockValue(event.target.value) })}
+        >
+          <option value="off">Off</option>
+          {LOCK_CHOICES.map((minutes) => (
+            <option key={minutes} value={minutes}>
+              {minutes} minutes
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-copy">
+          <strong>Lock the vault while the tab is hidden</strong>
+          <p>After this time in the background, keyrig locks the keys when you return.</p>
+        </div>
+        <select
+          className="select"
+          aria-label="Hidden auto-lock"
+          value={lockValue(settings.lockOnHiddenMinutes)}
+          onChange={(event) => writeSettings({ lockOnHiddenMinutes: fromLockValue(event.target.value) })}
+        >
+          <option value="off">Off</option>
+          {LOCK_CHOICES.map((minutes) => (
+            <option key={minutes} value={minutes}>
+              {minutes} minutes
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="settings-note">

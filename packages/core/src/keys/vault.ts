@@ -10,6 +10,12 @@ import { KeyrigError, createDocument, createId, isVersionedDocument, type Storag
 
 export const VAULT_STORAGE_KEY = "keyrig.vault.v1";
 /**
+ * B8: a small counter beside the vault. A tab checks it before every write, so
+ * a stale in-memory blob cannot replace a newer one from another tab. It is a
+ * separate key, so the vault format and VAULT_SCHEMA_VERSION do not change.
+ */
+export const VAULT_GENERATION_KEY = "keyrig.vault.generation.v1";
+/**
  * A record for a secret that is not a provider key. keyrig uses it for the
  * GitHub token. It lives in the same encrypted blob and it never appears in
  * the key list.
@@ -17,6 +23,18 @@ export const VAULT_STORAGE_KEY = "keyrig.vault.v1";
 export const AUX_PROVIDER_ID = "keyrig.internal";
 export const VAULT_SCHEMA_VERSION = 1;
 export const PBKDF2_ITERATIONS = 600_000;
+/** A work factor outside this range is refused. There is no silent fallback. */
+export const MIN_PBKDF2_ITERATIONS = 1_000;
+export const MAX_PBKDF2_ITERATIONS = 2_000_000;
+
+export function isSupportedWorkFactor(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= MIN_PBKDF2_ITERATIONS &&
+    value <= MAX_PBKDF2_ITERATIONS
+  );
+}
 
 export interface KeyInput {
   label: string;
@@ -92,6 +110,13 @@ export class KeyVault {
   #items: KeyRecord[] | null = null;
   #key: CryptoKey | null = null;
   #salt: Uint8Array | null = null;
+  /**
+   * KS-02: the work factor of the key in memory. persist() writes this value,
+   * so an unlock at another count can never make the next write unreadable.
+   */
+  #activeIterations: number | null = null;
+  /** B8: the generation that this tab read. A later write must match it. */
+  #generation: number | null = null;
 
   constructor(options: VaultOptions) {
     this.#storage = options.storage;
@@ -153,6 +178,8 @@ export class KeyVault {
     }
     this.#salt = this.#crypto.getRandomValues(new Uint8Array(16));
     this.#key = await this.#deriveKey(passphrase, this.#salt);
+    this.#activeIterations = this.#iterations;
+    this.#generation = this.#readGeneration();
     this.#items = [];
     this.#state = "unlocked";
     await this.persist();
@@ -167,11 +194,16 @@ export class KeyVault {
       });
     }
     const salt = fromBase64(blob.salt);
-    // Read the work factor from the record, so an imported vault still opens.
-    const iterations =
-      typeof blob.iterations === "number" && blob.iterations >= 1_000 && blob.iterations <= 2_000_000
-        ? blob.iterations
-        : this.#iterations;
+    // KS-02: read the work factor from the record, so an imported vault still
+    // opens. A count outside the range is an error, never a fallback.
+    if (!isSupportedWorkFactor(blob.iterations)) {
+      throw KeyrigError.fromCategory("invalid_request", {
+        code: "vault_work_factor_unsupported",
+        message: `The key vault uses a work factor that keyrig does not accept (${String(blob.iterations)}). The accepted range is ${MIN_PBKDF2_ITERATIONS} to ${MAX_PBKDF2_ITERATIONS}.`,
+        action: "check_settings",
+      });
+    }
+    const iterations = blob.iterations;
     const key = await this.#deriveKey(passphrase, salt, iterations);
     let plaintext: ArrayBuffer;
     try {
@@ -211,12 +243,24 @@ export class KeyVault {
     );
     this.#key = key;
     this.#salt = salt;
+    this.#activeIterations = iterations;
+    this.#generation = this.#readGeneration();
     this.#state = "unlocked";
+
+    // KS-02: move an old vault to the current default at unlock time, before
+    // the first later write. The same salt keeps the same passphrase check.
+    if (iterations < this.#iterations) {
+      this.#key = await this.#deriveKey(passphrase, salt, this.#iterations);
+      this.#activeIterations = this.#iterations;
+      await this.persist();
+    }
   }
 
   lock(): void {
     this.#items = null;
     this.#key = null;
+    this.#activeIterations = null;
+    this.#generation = null;
     this.#state = this.#readBlob() ? "locked" : "empty";
   }
 
@@ -365,7 +409,9 @@ export class KeyVault {
     }
     await this.unlock(current);
     this.#salt = this.#crypto.getRandomValues(new Uint8Array(16));
-    this.#key = await this.#deriveKey(next, this.#salt);
+    // KS-02: a new passphrase always uses the build default work factor.
+    this.#key = await this.#deriveKey(next, this.#salt, this.#iterations);
+    this.#activeIterations = this.#iterations;
     await this.persist();
   }
 
@@ -380,6 +426,15 @@ export class KeyVault {
         message: "Unlock the key vault first.",
       });
     }
+    // B8: refuse a stale write. Another tab moves the counter with its write.
+    const storedGeneration = this.#readGeneration();
+    if (this.#generation !== null && storedGeneration !== this.#generation) {
+      throw KeyrigError.fromCategory("invalid_request", {
+        code: "vault_conflict",
+        message: "Another tab changed the key vault. Sign in again to read the newest keys.",
+        action: "retry",
+      });
+    }
     const iv = this.#crypto.getRandomValues(new Uint8Array(12));
     const ciphertext = await this.#crypto.subtle.encrypt(
       { name: "AES-GCM", iv: toArrayBuffer(iv) },
@@ -389,19 +444,32 @@ export class KeyVault {
     const blob: EncryptedBlob = {
       version: 1,
       kdf: "PBKDF2-SHA256",
-      iterations: this.#iterations,
+      iterations: this.#activeIterations ?? this.#iterations,
       salt: toBase64(salt),
       iv: toBase64(iv),
       ciphertext: toBase64(new Uint8Array(ciphertext)),
     };
     try {
       this.#storage.setItem(VAULT_STORAGE_KEY, JSON.stringify(createDocument(VAULT_SCHEMA_VERSION, blob)));
+      // Move the counter only after the blob is in storage.
+      this.#storage.setItem(VAULT_GENERATION_KEY, String(storedGeneration + 1));
+      this.#generation = storedGeneration + 1;
     } catch {
       throw KeyrigError.fromCategory("invalid_request", {
         code: "storage_write_failed",
         message: "keyrig cannot save the key vault. The browser storage is full or blocked.",
         action: "check_settings",
       });
+    }
+  }
+
+  #readGeneration(): number {
+    try {
+      const raw = this.#storage.getItem(VAULT_GENERATION_KEY);
+      const value = raw === null ? 1 : Number(raw);
+      return Number.isInteger(value) && value >= 1 ? value : 1;
+    } catch {
+      return 1;
     }
   }
 

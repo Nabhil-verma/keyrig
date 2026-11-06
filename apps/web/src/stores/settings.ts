@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { THEME_KEY, type Theme } from "../lib/theme";
 import { browserStorage } from "../lib/storage";
+import { normalizeAutoLockMinutes } from "../lib/autoLock";
 
 /**
  * The settings of this device. They are not per account: the theme, the
@@ -28,6 +29,10 @@ interface AppSettings {
   /** The name that the dashboard greets. It stays on this device. */
   displayName: string;
   rememberRoute: boolean;
+  /** B8 #4: minutes of no activity before the vault locks. null turns it off. */
+  autoLockMinutes: number | null;
+  /** B8 #4: minutes that the tab stays hidden before the vault locks. */
+  lockOnHiddenMinutes: number | null;
   /** AS-06: the user block of the guard prompt. The core caps the length. */
   instructions: string;
   /** CO-02: the daily spend limit in USD. null means no limit. */
@@ -48,6 +53,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   layoutWidth: "cozy",
   displayName: "",
   rememberRoute: true,
+  autoLockMinutes: 15,
+  lockOnHiddenMinutes: 5,
   instructions: "",
   dailyBudgetUsd: null,
   disabledProviders: [],
@@ -111,6 +118,11 @@ export function normalizeSettings(input: Partial<AppSettings> | null, fallbackTh
     layoutWidth: isLayout(source.layoutWidth) ? source.layoutWidth : DEFAULT_SETTINGS.layoutWidth,
     displayName: normalizeDisplayName(source.displayName),
     rememberRoute: typeof source.rememberRoute === "boolean" ? source.rememberRoute : DEFAULT_SETTINGS.rememberRoute,
+    autoLockMinutes: normalizeAutoLockMinutes(source.autoLockMinutes, DEFAULT_SETTINGS.autoLockMinutes),
+    lockOnHiddenMinutes: normalizeAutoLockMinutes(
+      source.lockOnHiddenMinutes,
+      DEFAULT_SETTINGS.lockOnHiddenMinutes,
+    ),
     instructions: normalizeInstructionText(source.instructions),
     dailyBudgetUsd: normalizeBudgetLimit(source.dailyBudgetUsd),
     disabledProviders: disabled,
