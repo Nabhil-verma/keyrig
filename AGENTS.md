@@ -1,39 +1,44 @@
 # AGENTS.md — rules for keyrig contributors
 
-Read this file before you change the repository. The rules apply to humans and to AI agents.
+Read this file before you change the repository. The rules apply to humans, Antigravity agents, and terminal agents (such as OpenCode).
 
-## Product rules
+## Core Facts
+- Web app. React, TypeScript, Vite, Framer Motion.
+- npm workspaces: `apps/web`, `packages/shared`, `packages/providers`, `packages/core`, `docs/`, `tools/`.
+- Node 22 or newer. Dev server: `127.0.0.1:5199`. MIT license.
+- No keyrig server. All data stays on device.
 
-Read [docs/PRODUCT_RULES.md](docs/PRODUCT_RULES.md). The rules PR-01 to PR-05 are not optional.
+## Product Rules (PR-01 to PR-05)
+Read `docs/PRODUCT_RULES.md`. Rules PR-01 to PR-05 are not optional.
+- **PR-01 You own the keys.** Keys stay on the user device. No keyrig server stores a key.
+- **PR-02 Every answer shows its source.** Show the model, the key label, the token counts, and the price state.
+- **PR-03 Every request shows its cost.** If price is not known, show "unknown". Never guess a price as fact.
+- **PR-04 Failures are clear and safe.** Show a clear error with one fix action. Never show a key in an error.
+- **PR-05 Telemetry is off.** Do not add analytics, tracking, or remote logging.
 
-## Writing rules
-
-Read [docs/STYLE.md](docs/STYLE.md). Write all UI text, docs and error text in ASD-STE100 style.
-Use short sentences. Use the active voice. Use one word for one meaning.
+## Writing Rules
+Read `docs/STYLE.md`. Write all UI text, docs, and error text in ASD-STE100 style:
+- Short sentences (20 words or fewer).
+- Active voice and simple present tense.
+- One word for one meaning. No idioms.
+- An error message must state: what happened, and one action to fix it.
 
 ## Requirement IDs
+The reference spec gives each rule an ID: `KS`, `PV`, `CO`, `ER`, `AS`, `MC`, `CX`, `AR`, `OB`, `TS`, `UX`, `BR`, `RL`.
+Name the ID in the plan, commit message, and test name. Example: `KS-06 classifies auth failures by HTTP status only`.
 
-The reference spec gives each rule an ID: KS, PV, CO, ER, AS, MC, CX, AR, OB, TS, UX, BR, RL.
-Name the ID in the plan, the commit message and the test name.
-
-Example: `KS-06 classifies auth failures by HTTP status only`.
-
-## Layers
-
-Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-- `packages/shared` imports nothing from the workspace.
+## Layer Rules
+Read `docs/ARCHITECTURE.md`.
+- Hierarchy (high to low): `apps/web` -> `packages/core` -> `packages/providers` -> `packages/shared`.
+- A lower layer must never import a higher layer.
+- `packages/shared` imports nothing from workspace.
 - `packages/providers` imports `shared` only.
 - `packages/core` imports `shared` and `providers`.
-- `apps/web` imports the three packages.
+- `apps/web` imports from all three packages.
+- Always run `npm run check:layers` after changing imports.
 
-Run `npm run check:layers` after you add an import across packages.
-
-## File layout
-
-Read [docs/MAP.md](docs/MAP.md). Put each new file in the folder that names its role.
-Do not add a source file to the top of `apps/web/src`.
-
+## File Layout
+Read `docs/MAP.md`. Put each new file in the folder naming its role:
 | Folder | Holds |
 |---|---|
 | `apps/web/src/app/` | The shell, the router and the page host |
@@ -56,26 +61,32 @@ Do not add a source file to the top of `apps/web/src`.
 | `packages/core/src/agent/` | The agent loop, the tools, the prompt and the commit call |
 | `packages/core/src/chat/` | The chat turn, the model list, the usage and the budget |
 
-## Key safety
+## Key Safety and Security
+- Use PBKDF2-SHA256 with 600,000 iterations to derive vault keys.
+- Use AES-GCM to encrypt keys with a new random IV every time.
+- Never write a key, fragment, or header to `console`, logs, files, tests, exports, or errors.
+- Call redaction (`redact` or `redactDeep`) before text leaves the process.
+- Show warnings for local/private addresses; block cloud metadata addresses.
+- Never commit a real key or add real keys to fixtures. Tests must replay recorded traffic.
 
-- Do not write a key, a key fragment or a request header to a log, a file, a test, an export, a chat message or a telemetry event.
-- Call the redaction function (`redact` or `redactDeep`) before any text leaves the process.
-- Do not commit a real key. Do not add a real key to a test fixture.
-- Recorded provider traffic MUST be redacted before you save it.
+## UI Design Rules
+- Colors: Amber means key. Cyan means AI link. Never swap these meanings.
+- Type: Inter for text; JetBrains Mono for code, keys, and numbers.
+- Theme: Dark theme is default. Light theme must work. Respect `prefers-reduced-motion`.
 
-## Provider changes
+## Decisions and Scope
+- Decisions: D-01 Web first. D-02 v1 is chat, arena, artifacts. D-03 Day-one providers: OpenAI-compatible, Anthropic, Ollama. D-04 No server. D-05 MIT license. D-06 Single user.
+- Not built yet: desktop app, keychain, fallback chain, model migration, budgets, artifact canvas, MCP, coding agent. Do not build these unless asked by name.
 
-Read [packages/providers/README.md](packages/providers/README.md).
+## Git Rules
+- Small commits with imperative messages (e.g., `Add key label to answer card`).
+- Never commit `.env` or secrets.
+- Add local agent folders to `.git/info/exclude`.
 
-- Add provider quirks to a manifest or to a named rule. Do not add them to the UI or to the agent loop.
-- Do not build a hand-made model table. Read the catalog.
+## Verification (Run before finishing any task)
+- Run `npm test` and `npm run check:layers`.
+- If a check fails, fix the cause. Do not weaken tests.
+- Report check results. Never say "done" if a check fails.
 
-## Verification
-
-- Run `npm test` and `npm run typecheck` before you report a change as complete.
-- Run the test that proves the rule you changed.
-- If a test fails, fix the cause. Do not weaken the test.
-
-## Conflict rule
-
-If a request conflicts with the spec or with a product rule, tell the user. Do not pick one in silence.
+## Conflict Rule
+If a request conflicts with the spec or a product rule, stop and tell the user. Do not pick one in silence.
