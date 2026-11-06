@@ -1,3 +1,4 @@
+import { redact } from "@keyrig/shared";
 import { formatUsd } from "@keyrig/providers";
 import type { StoredThread } from "../stores/threads";
 import type { UIMessage } from "./types";
@@ -8,7 +9,7 @@ import type { UIMessage } from "./types";
  */
 export function threadToMarkdown(thread: StoredThread): string {
   const lines: string[] = [
-    `# ${thread.title}`,
+    `# ${redact(thread.title)}`,
     "",
     `Exported ${new Date().toISOString()} from keyrig.`,
     "",
@@ -16,7 +17,8 @@ export function threadToMarkdown(thread: StoredThread): string {
 
   for (const message of thread.messages) {
     if (message.role === "user") {
-      lines.push("## You", "", message.display ?? message.content, "");
+      // KS-03: a pasted key must not reach the export file.
+      lines.push("## You", "", redact(message.display ?? message.content), "");
       continue;
     }
 
@@ -26,10 +28,10 @@ export function threadToMarkdown(thread: StoredThread): string {
       lines.push(`_${meta.join(" · ")}_`, "");
     }
     if (message.content.length > 0) {
-      lines.push(message.content, "");
+      lines.push(redact(message.content), "");
     }
     if (message.error !== undefined) {
-      lines.push(`> **${message.error.category}** — ${message.error.message}`, "");
+      lines.push(`> **${message.error.category}** — ${redact(message.error.message)}`, "");
     }
     if (message.scene !== undefined) {
       lines.push(`_3D scene: ${message.scene.title} (${message.scene.nodes.length} nodes)_`, "");

@@ -1,3 +1,4 @@
+import { PROVIDER_KEY_PREFIXES } from "@keyrig/shared";
 import { describe, expect, it } from "vitest";
 import { BUILTIN_MANIFESTS } from "../manifests/builtins";
 import { checkBaseUrl, envVarFor, joinUrl } from "../manifests/manifest";
@@ -18,6 +19,24 @@ describe("PV-02 provider manifests", () => {
       expect(ids.has(manifest.id)).toBe(false);
       ids.add(manifest.id);
     }
+  });
+
+  it("KS-03 gives every manifest its key prefixes, or an explicit empty list", () => {
+    const known = new Set(PROVIDER_KEY_PREFIXES.map((entry) => entry.prefix));
+    for (const manifest of BUILTIN_MANIFESTS) {
+      expect(Array.isArray(manifest.keyPrefixes), manifest.id).toBe(true);
+      for (const prefix of manifest.keyPrefixes) {
+        expect(known.has(prefix), `${manifest.id} ${prefix}`).toBe(true);
+      }
+    }
+    // The providers that issue a key must name at least one prefix.
+    for (const id of ["openai", "anthropic"]) {
+      const manifest = BUILTIN_MANIFESTS.find((entry) => entry.id === id);
+      expect(manifest?.keyPrefixes.length, id).toBeGreaterThan(0);
+    }
+    // Local providers have no known prefix. The empty list is the explicit entry.
+    const local = BUILTIN_MANIFESTS.find((entry) => entry.id === "ollama");
+    expect(local?.keyPrefixes).toEqual([]);
   });
 
   it("has the three day-one providers and the local types", () => {

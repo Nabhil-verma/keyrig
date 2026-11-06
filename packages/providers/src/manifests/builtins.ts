@@ -1,3 +1,4 @@
+import { keyPrefixesFor } from "@keyrig/shared";
 import type { ProviderManifest } from "./manifest";
 
 /**
@@ -14,6 +15,7 @@ export const BUILTIN_MANIFESTS: readonly ProviderManifest[] = [
     baseUrl: "https://api.openai.com/v1",
     defaultModel: "gpt-5.4",
     envVars: ["OPENAI_API_KEY"],
+    keyPrefixes: keyPrefixesFor("openai"),
     abilities: {
       streaming: true,
       tools: true,
@@ -36,6 +38,7 @@ export const BUILTIN_MANIFESTS: readonly ProviderManifest[] = [
     baseUrl: "https://api.anthropic.com/v1",
     defaultModel: "claude-sonnet-4-5",
     envVars: ["ANTHROPIC_API_KEY"],
+    keyPrefixes: keyPrefixesFor("anthropic"),
     abilities: {
       streaming: true,
       tools: true,
@@ -58,6 +61,7 @@ export const BUILTIN_MANIFESTS: readonly ProviderManifest[] = [
     baseUrl: "https://freebuff.com/api/v1/paid",
     defaultModel: "gpt-5.4",
     envVars: ["FREEBUFF_API_KEY"],
+    keyPrefixes: [],
     abilities: {
       streaming: true,
       tools: false,
@@ -84,6 +88,7 @@ export const BUILTIN_MANIFESTS: readonly ProviderManifest[] = [
     baseUrl: "http://127.0.0.1:11434",
     defaultModel: "llama3.2",
     envVars: [],
+    keyPrefixes: [],
     abilities: {
       streaming: true,
       tools: true,
@@ -106,6 +111,7 @@ export const BUILTIN_MANIFESTS: readonly ProviderManifest[] = [
     baseUrl: "http://127.0.0.1:1234/v1",
     defaultModel: "",
     envVars: [],
+    keyPrefixes: [],
     abilities: {
       streaming: true,
       tools: true,
@@ -130,6 +136,7 @@ export const BUILTIN_MANIFESTS: readonly ProviderManifest[] = [
     baseUrl: "/api/ai/v1",
     defaultModel: "@cf/meta/llama-3.1-8b-instruct-fp8",
     envVars: [],
+    keyPrefixes: [],
     abilities: {
       streaming: true,
       tools: false,
@@ -152,6 +159,7 @@ export const BUILTIN_MANIFESTS: readonly ProviderManifest[] = [
     baseUrl: "http://127.0.0.1:8000/v1",
     defaultModel: "",
     envVars: [],
+    keyPrefixes: [],
     abilities: {
       streaming: true,
       tools: true,

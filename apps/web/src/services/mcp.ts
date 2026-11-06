@@ -1,4 +1,4 @@
-import { bindFetch } from "@keyrig/shared";
+import { bindFetch, redact } from "@keyrig/shared";
 import { checkConnectorUrl } from "../stores/connectors";
 import { normalizeTools, type Connector, type ConnectorTool } from "../stores/connectors";
 
@@ -35,7 +35,8 @@ function errorText(error: unknown): string {
     return "The server reported an error.";
   }
   const message = typeof record.message === "string" ? record.message.trim() : "";
-  return message.length > 0 ? message : "The server reported an error.";
+  // KS-03: a server error can quote a header. Mask it before it reaches the UI.
+  return message.length > 0 ? redact(message) : "The server reported an error.";
 }
 
 /** Read the first JSON-RPC envelope out of an SSE body. */
@@ -201,7 +202,8 @@ export async function callMcpTool(
       parts.push(item.text);
     }
   }
-  const text = parts.join("\n").trim();
+  // KS-03: a tool result is a sink. Mask a key before the agent reads it.
+  const text = redact(parts.join("\n").trim());
   return {
     text: text.length > 0 ? text.slice(0, MAX_RESULT_CHARS) : "(The tool returned no text.)",
     isError: record?.isError === true,

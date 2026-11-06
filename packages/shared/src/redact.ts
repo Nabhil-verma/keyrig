@@ -13,19 +13,59 @@ export interface RedactOptions {
 const REPLACEMENT = "[redacted]";
 
 /**
+ * KS-03: the provider key prefixes. This is the one table. A provider manifest
+ * names its prefixes from this table, and the redactor builds its patterns from
+ * it, so a new provider cannot be forgotten. `packages/providers` checks that
+ * every manifest prefix appears here.
+ */
+export interface ProviderKeyPrefix {
+  provider: string;
+  prefix: string;
+  /** The shortest credential body that follows the prefix. */
+  minLength: number;
+}
+
+export const PROVIDER_KEY_PREFIXES: readonly ProviderKeyPrefix[] = [
+  { provider: "anthropic", prefix: "sk-ant-", minLength: 20 },
+  { provider: "openai", prefix: "sk-proj-", minLength: 20 },
+  { provider: "openai", prefix: "sk-svcacct-", minLength: 20 },
+  { provider: "openai", prefix: "sk-admin-", minLength: 20 },
+  { provider: "openrouter", prefix: "sk-or-v1-", minLength: 20 },
+  { provider: "openai", prefix: "sk-", minLength: 20 },
+  { provider: "groq", prefix: "gsk_", minLength: 20 },
+  { provider: "xai", prefix: "xai-", minLength: 20 },
+  { provider: "perplexity", prefix: "pplx-", minLength: 20 },
+];
+
+/** The prefixes that a manifest declares. An empty list means no known prefix. */
+export function keyPrefixesFor(provider: string): readonly string[] {
+  return PROVIDER_KEY_PREFIXES.filter((entry) => entry.provider === provider).map((entry) => entry.prefix);
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const PREFIX_PATTERNS: readonly RegExp[] = [...PROVIDER_KEY_PREFIXES]
+  // A longer prefix wins, so sk-proj- is matched before sk-.
+  .sort((left, right) => right.prefix.length - left.prefix.length)
+  .map(
+    (entry) =>
+      // The boundary stops a match in the middle of a word such as risk-assessment.
+      new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(entry.prefix)}[A-Za-z0-9_-]{${entry.minLength},}`, "g"),
+  );
+
+/**
  * Shapes of keys from common providers. The patterns are anchored on the
  * provider prefix so a normal sentence is not changed.
  */
 const SECRET_PATTERNS: readonly RegExp[] = [
-  /sk-ant-[A-Za-z0-9_-]{20,}/g,
-  /sk-proj-[A-Za-z0-9_-]{20,}/g,
-  /sk-[A-Za-z0-9]{20,}/g,
+  ...PREFIX_PATTERNS,
   /AIza[0-9A-Za-z_-]{35}/g,
-  /ghp_[A-Za-z0-9]{36}/g,
-  /gho_[A-Za-z0-9]{36}/g,
-  /github_pat_[A-Za-z0-9_]{22,}/g,
-  /xox[baprs]-[A-Za-z0-9-]{10,}/g,
-  /hf_[A-Za-z0-9]{30,}/g,
+  /(?<![A-Za-z0-9])gh[pous]_[A-Za-z0-9]{30,}/g,
+  /(?<![A-Za-z0-9])github_pat_[A-Za-z0-9_]{22,}/g,
+  /(?<![A-Za-z0-9])xox[baprs]-[A-Za-z0-9-]{10,}/g,
+  /(?<![A-Za-z0-9])hf_[A-Za-z0-9]{30,}/g,
   /(?<=Bearer\s)[A-Za-z0-9._~+/-]{8,}=*/g,
   /(?<=[?&](?:api_key|apikey|key|token|access_token)=)[^&\s#]+/gi,
   /(?<=(?:x-api-key|x-goog-api-key)["']?\s*[:=]\s*["']?)[A-Za-z0-9._-]{8,}/gi,

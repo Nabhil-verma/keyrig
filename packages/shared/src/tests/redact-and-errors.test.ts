@@ -7,7 +7,7 @@ import {
   describeError,
   toKeyrigError,
 } from "../errors";
-import { maskSecret, redact, redactDeep } from "../redact";
+import { PROVIDER_KEY_PREFIXES, maskSecret, redact, redactDeep } from "../redact";
 
 const OPENAI_KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";
 const ANTHROPIC_KEY = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345";
@@ -142,6 +142,34 @@ describe("KS-03 one redaction function", () => {
 
   it("does not change normal text", () => {
     expect(redact("The model answered in 2.4 seconds.")).toBe("The model answered in 2.4 seconds.");
+  });
+
+  it("does not mask a sk- shape in the middle of a normal word", () => {
+    const text = "The risk-assessment-planning-process and task-management-system-2026-11-04 are done.";
+    expect(redact(text)).toBe(text);
+  });
+
+  it.each(PROVIDER_KEY_PREFIXES.map((entry) => [entry.provider, entry.prefix] as const))(
+    "masks a %s key with the prefix %s",
+    (_provider, prefix) => {
+      const secret = `${prefix}${"a1B2c3D4e5F6g7H8i9J0".repeat(2)}`;
+      const output = redact(`request failed for ${secret} at 12:00`);
+      expect(output).not.toContain(secret);
+      expect(output).toContain("[redacted]");
+      expect(output).toContain("request failed for");
+    },
+  );
+
+  it.each([
+    ["openrouter", "sk-or-v1-"],
+    ["groq", "gsk_"],
+    ["xai", "xai-"],
+    ["github", "ghs_"],
+    ["perplexity", "pplx-"],
+    ["openai service account", "sk-svcacct-"],
+  ])("masks the %s prefix that the audit found missing (%s)", (_name, prefix) => {
+    const secret = `${prefix}${"0123456789abcdefghij".repeat(2)}`;
+    expect(redact(`key=${secret}`)).toBe("key=[redacted]");
   });
 });
 

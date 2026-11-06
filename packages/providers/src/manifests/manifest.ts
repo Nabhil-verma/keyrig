@@ -25,6 +25,11 @@ export interface ProviderManifest {
   baseUrl: string;
   defaultModel: string;
   envVars: readonly string[];
+  /**
+   * KS-03: the key prefixes that this provider issues, from the one table in
+   * `@keyrig/shared`. An empty list is the explicit "no known prefix" entry.
+   */
+  keyPrefixes: readonly string[];
   abilities: ProviderAbilities;
   wireFormat: WireFormat;
   reasoningFormat: ReasoningFormat;
