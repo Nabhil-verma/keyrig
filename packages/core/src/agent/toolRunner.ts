@@ -33,8 +33,54 @@ export type ToolWorkerFactory = (source: string) => ToolWorker;
  * the tool did not declare becomes a function that stops the call. The global
  * storage objects are stopped in the same way.
  */
+const TOOL_SCRIPT_SLOT = "/*__KEYRIG_TOOL_SCRIPT__*/";
+
+/**
+ * Put the tool body in the worker source. The worker never calls eval or
+ * `new Function`, so the app can run a strict Content-Security-Policy.
+ */
+export function buildToolSandboxSource(script: string): string {
+  return TOOL_SANDBOX_SOURCE.replace(TOOL_SCRIPT_SLOT, () => script);
+}
+
 export const TOOL_SANDBOX_SOURCE = `
-const stop = () => { throw new Error("This tool has no permission for that action."); };
+const capture = (name) => {
+  try { return self[name]; } catch (error) { return undefined; }
+};
+// Keep the real fetch only for a tool that the user gave the network permission.
+// A worker method needs its own global as this, so bind it before the global
+// is frozen. A bare const f = fetch throws "Illegal invocation" in Chrome.
+const rawFetch = capture("fetch");
+const permittedFetch = typeof rawFetch === "function" ? rawFetch.bind(self) : undefined;
+const block = (object, name) => {
+  try { delete object[name]; } catch (error) {}
+  try {
+    Object.defineProperty(object, name, {
+      value: undefined,
+      writable: false,
+      configurable: false,
+      enumerable: false
+    });
+  } catch (error) {}
+};
+// PR-01: remove every path to the network from the worker global. A function
+// argument is not enough: self.fetch and globalThis.fetch must fail too.
+for (const name of [
+  "fetch", "XMLHttpRequest", "EventSource", "WebSocket", "WebSocketStream",
+  "WebTransport", "RTCPeerConnection", "importScripts", "Worker", "SharedWorker",
+  "BroadcastChannel", "localStorage", "sessionStorage", "indexedDB"
+]) {
+  block(self, name);
+}
+try {
+  if (self.navigator) {
+    block(self.navigator, "sendBeacon");
+    Object.freeze(self.navigator);
+  }
+} catch (error) {}
+const runTool = async (input, api, fetch, navigator) => {
+  /*__KEYRIG_TOOL_SCRIPT__*/
+};
 self.onmessage = async (event) => {
   const data = event.data || {};
   const permissions = Array.isArray(data.permissions) ? data.permissions : [];
@@ -44,15 +90,11 @@ self.onmessage = async (event) => {
     now: () => Date.now()
   });
   try {
-    const fn = new Function(
-      "input", "api", "fetch", "localStorage", "sessionStorage", "indexedDB", "WebSocket", "importScripts", "Worker",
-      data.script
-    );
-    const output = await fn(
+    const output = await runTool(
       data.input,
       api,
-      allow("network") ? self.fetch : stop,
-      stop, stop, stop, stop, stop, stop
+      allow("network") ? permittedFetch : undefined,
+      self.navigator
     );
     const text = JSON.stringify(output);
     if (text === undefined) {
@@ -63,6 +105,9 @@ self.onmessage = async (event) => {
     self.postMessage({ ok: false, message: String(error && error.message ? error.message : error) });
   }
 };
+// The global is frozen after the handler is attached, so a tool cannot put a
+// removed network function back.
+try { Object.freeze(self); } catch (error) {}
 `;
 
 export interface ToolRunOptions {
@@ -134,7 +179,7 @@ export async function runToolInSandbox(options: ToolRunOptions): Promise<ToolRun
   });
   const files = permissions.includes("files") && options.files !== undefined ? { ...options.files } : {};
 
-  const worker = options.factory(TOOL_SANDBOX_SOURCE);
+  const worker = options.factory(buildToolSandboxSource(options.tool.script));
   const timeoutMs = options.timeoutMs ?? TOOL_TIMEOUT_MS;
   const maxOutputChars = options.maxOutputChars ?? TOOL_OUTPUT_CHARS;
   const startedAt = Date.now();
@@ -206,7 +251,6 @@ export async function runToolInSandbox(options: ToolRunOptions): Promise<ToolRun
 
     worker.postMessage({
       kind: "keyrig.tool.run",
-      script: options.tool.script,
       input: context.input,
       permissions,
       files,

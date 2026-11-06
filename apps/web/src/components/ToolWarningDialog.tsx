@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   PERMISSION_LABELS,
   TOOL_SCRIPT_WARNING,
+  permissionDataLabels,
   TOOL_WARNING_TEXT,
   TOOL_WARNING_TITLE,
   permissionEffects,
@@ -82,6 +83,17 @@ export function ToolWarningDialog({ request, onClose, error }: ToolWarningDialog
             Permissions:{" "}
             {request.permissions.map((permission) => PERMISSION_LABELS[permission]).join(", ")}
           </p>
+          {/* Backlog #9: one plain data label for each permission. */}
+          <div className="tool-warn-data" aria-label="Data risk">
+            {permissionDataLabels(request.permissions).map((label) => (
+              <span
+                key={label}
+                className={`chip ${label === "Can send data out" ? "chip--amber" : "chip--plain"}`}
+              >
+                {label}
+              </span>
+            ))}
+          </div>
         </div>
 
         <p className="hint">{TOOL_SCRIPT_WARNING}</p>

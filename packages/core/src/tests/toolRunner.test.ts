@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { TOOL_SANDBOX_SOURCE, runToolInSandbox, type ToolWorker } from "../agent/toolRunner";
-import type { Tool } from "../agent/toolDefinition";
+import {
+  PERMISSION_DATA_LABELS,
+  permissionDataLabels,
+  type Tool,
+} from "../agent/toolDefinition";
 
 const TOOL: Tool = {
   id: "tool_test",
@@ -57,7 +61,7 @@ class FakeWorker implements ToolWorker {
 }
 
 describe("PR-01 the tool sandbox holds no key", () => {
-  it("sends the input, the script and the permissions only", async () => {
+  it("sends the input and the permissions only", async () => {
     const worker = new FakeWorker();
     const run = runToolInSandbox({
       tool: TOOL,
@@ -74,7 +78,6 @@ describe("PR-01 the tool sandbox holds no key", () => {
       "input",
       "kind",
       "permissions",
-      "script",
     ]);
     for (const name of ["vault", "passphrase", "apiKey", "secret"]) {
       expect(message.toLowerCase()).not.toContain(name.toLowerCase());
@@ -102,6 +105,14 @@ describe("PR-01 the tool sandbox holds no key", () => {
     expect(TOOL_SANDBOX_SOURCE).toContain('"indexedDB"');
     expect(TOOL_SANDBOX_SOURCE).toContain('allow("files")');
     expect(TOOL_SANDBOX_SOURCE).toContain('allow("network")');
+  });
+
+  it("PR-01 #9 labels the network permission as a data risk", () => {
+    expect(PERMISSION_DATA_LABELS.network).toBe("Can send data out");
+    expect(PERMISSION_DATA_LABELS.none).toBe("Cannot send data out");
+    expect(PERMISSION_DATA_LABELS.files).toBe("Cannot send data out");
+    // normalizePermissions sorts, so files comes before network.
+    expect(permissionDataLabels(["network", "files"])).toEqual(["Cannot send data out", "Can send data out"]);
   });
 });
 

@@ -1,4 +1,4 @@
-import { KeyrigError } from "@keyrig/shared";
+import { KeyrigError, redactDeep } from "@keyrig/shared";
 import type { ChatMessage, ToolCall, ToolSpec } from "@keyrig/providers";
 import {
   MAX_AGENT_STEPS,
@@ -83,7 +83,8 @@ export interface AgentOutcome {
 }
 
 function resultText(value: ToolExecution): string {
-  const text = JSON.stringify(value);
+  // KS-03: a tool result can quote a workspace file. Mask a key-shaped value.
+  const text = JSON.stringify(redactDeep(value));
   if (text.length <= MAX_TOOL_RESULT_CHARS) {
     return text;
   }

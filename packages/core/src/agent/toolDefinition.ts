@@ -75,10 +75,28 @@ export const PERMISSION_LABELS: Record<ToolPermission, string> = {
 
 export const PERMISSION_EFFECTS: Record<ToolPermission, string> = {
   none: "The tool works on the input only.",
-  network: "The tool can send a request from this browser. It can send your input to a server that you did not choose.",
+  network: "The tool can send data out. It can send your input to a server that you did not choose.",
   files: "The tool can read the workspace text that you give it. It cannot read the key vault.",
   "run-code": "The tool can start more code inside its sandbox.",
 };
+
+/**
+ * Backlog #9: one plain label for the data risk of each permission. The
+ * warning card and the marketplace card show this label before an install.
+ */
+export const PERMISSION_DATA_LABELS: Record<ToolPermission, string> = {
+  none: "Cannot send data out",
+  network: "Can send data out",
+  files: "Cannot send data out",
+  "run-code": "Cannot send data out",
+};
+
+/** The data labels of a permission list, without a duplicate. */
+export function permissionDataLabels(permissions: readonly ToolPermission[]): string[] {
+  return [
+    ...new Set(normalizePermissions([...permissions]).map((permission) => PERMISSION_DATA_LABELS[permission])),
+  ];
+}
 
 function invalid(code: string, message: string): KeyrigError {
   return KeyrigError.fromCategory("invalid_request", {

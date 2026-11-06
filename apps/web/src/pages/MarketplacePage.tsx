@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { PERMISSION_LABELS, type ToolPermission } from "@keyrig/core";
+import { PERMISSION_DATA_LABELS, PERMISSION_LABELS, type ToolPermission } from "@keyrig/core";
 import { SiteFooter, SiteHeader } from "../app/SiteChrome";
 import { Link } from "../app/router";
 import { Icon } from "../components/ui/Icon";
@@ -29,10 +29,20 @@ function PermissionChips({ permissions }: { permissions: ToolPermission[] }) {
   return (
     <>
       {permissions.map((permission) => (
-        <span key={permission} className={`chip ${permission === "none" ? "chip--plain" : "chip--amber"}`}>
+        <span
+          key={permission}
+          className={`chip ${permission === "none" ? "chip--plain" : "chip--amber"}`}
+        >
           {PERMISSION_LABELS[permission]}
         </span>
       ))}
+      {permissions
+        .filter((permission) => PERMISSION_DATA_LABELS[permission] === "Can send data out")
+        .map((permission) => (
+          <span key={`${permission}-data`} className="chip chip--amber">
+            {PERMISSION_DATA_LABELS[permission]}
+          </span>
+        ))}
     </>
   );
 }
