@@ -20,7 +20,10 @@ function assets() {
 }
 
 function post(path, body, cookie) {
-  const headers = { "content-type": "application/json" };
+  const headers = {
+    "content-type": "application/json",
+    "x-keyrig-setup-token": "test-setup-token",
+  };
   if (cookie !== undefined) {
     headers.cookie = cookie;
   }
@@ -55,7 +58,12 @@ describe("D-07 the Worker attaches the backend when DB is present", () => {
   it("runs sign-up, account and marketplace calls through the Worker and SQLite", async () => {
     const database = createSqliteD1();
     databases.push(database);
-    const env = { DB: database, ASSETS: assets(), BACKEND_SESSION_SALT: "test-salt" };
+    const env = {
+      DB: database,
+      ASSETS: assets(),
+      BACKEND_SESSION_SALT: "test-session-secret-0123456789",
+      FIRST_OWNER_TOKEN: "test-setup-token",
+    };
 
     const signUp = await worker.fetch(
       post("/api/backend/account?mode=sign-up", {
@@ -108,6 +116,8 @@ describe("D-07 the Worker attaches the backend when DB is present", () => {
     const response = await worker.fetch(get("/api/backend/unknown"), {
       DB: database,
       ASSETS: assets(),
+      BACKEND_SESSION_SALT: "test-session-secret-0123456789",
+      FIRST_OWNER_TOKEN: "test-setup-token",
     });
 
     expect(response.status).toBe(404);

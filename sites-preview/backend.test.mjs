@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   BACKEND_FIELDS,
+  FIRST_OWNER_SETUP_HEADER,
+  resetSignInLimits,
   MAX_BODY_CHARS,
   accountProblem,
   backendRoute,
@@ -33,16 +35,17 @@ function memoryStore() {
     votes,
     requestVotes,
     async accountByName(username) {
-      const row = accounts.get(username);
+      const row = accounts.get(String(username).toLowerCase());
       return row === undefined ? null : { ...row };
     },
     async createAccount({ username, password }) {
-      if (accounts.has(username)) {
+      const name = String(username).toLowerCase();
+      if (accounts.has(name)) {
         return null;
       }
       const role = accounts.size === 0 ? "owner" : "viewer";
-      accounts.set(username, { username, role, password });
-      return { username, role };
+      accounts.set(name, { username: name, role, password });
+      return { username: name, role };
     },
     async setRole(username, role) {
       const row = accounts.get(username);
@@ -112,8 +115,12 @@ function memoryStore() {
   };
 }
 
-function post(path, body, cookie) {
-  const headers = { "content-type": "application/json" };
+function post(path, body, cookie, override = {}) {
+  const headers = {
+    "content-type": "application/json",
+    [FIRST_OWNER_SETUP_HEADER]: "test-setup-token",
+    ...override,
+  };
   if (cookie !== undefined) {
     headers.cookie = cookie;
   }
@@ -130,8 +137,17 @@ function get(path, cookie) {
   });
 }
 
+const ENV = {
+  BACKEND_SESSION_SALT: "test-session-secret-0123456789",
+  FIRST_OWNER_TOKEN: "test-setup-token",
+};
+
+beforeEach(() => {
+  resetSignInLimits();
+});
+
 function route(request, store) {
-  return routeWithStore(request, {}, new URL(request.url).pathname, store);
+  return routeWithStore(request, ENV, new URL(request.url).pathname, store);
 }
 
 function cookieOf(response) {
@@ -271,6 +287,7 @@ describe("D-07 the optional backend holds accounts, roles, the marketplace and f
     const response = await backendRoute(
       get("/api/backend/tools"),
       {
+        BACKEND_SESSION_SALT: "test-session-secret-0123456789",
         DB: {
           prepare() {
             throw new Error("d1 down for alice");
@@ -306,6 +323,88 @@ describe("D-07 the optional backend holds accounts, roles, the marketplace and f
 
     expect([first.status, second.status].sort()).toEqual([200, 409]);
     expect(store.accounts.size).toBe(1);
+  });
+
+  it("B5 refuses the first sign-up without the setup token", async () => {
+    const store = memoryStore();
+    const response = await route(
+      post(
+        "/api/backend/account?mode=sign-up",
+        { account: { username: "alice", password: "correct-horse" } },
+        undefined,
+        { [FIRST_OWNER_SETUP_HEADER]: "" },
+      ),
+      store,
+    );
+
+    expect(response.status).toBe(403);
+    expect((await response.json()).error.code).toBe("setup_token_required");
+    expect(store.accounts.size).toBe(0);
+  });
+
+  it("B7 treats account names as case-insensitive", async () => {
+    const store = memoryStore();
+    await signedUp(store, "Alice");
+    const again = await route(
+      post("/api/backend/account?mode=sign-in", { account: { username: "ALICE", password: "correct-horse" } }),
+      store,
+    );
+
+    expect(again.status).toBe(200);
+    expect(store.accounts.has("alice")).toBe(true);
+  });
+
+  it("B6 locks sign-in after five wrong passwords", async () => {
+    const store = memoryStore();
+    await signedUp(store, "alice");
+    let last;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      last = await route(
+        post("/api/backend/account?mode=sign-in", {
+          account: { username: "alice", password: "the-wrong-password" },
+        }),
+        store,
+      );
+      expect(last.status).toBe(403);
+    }
+    const locked = await route(
+      post("/api/backend/account?mode=sign-in", {
+        account: { username: "alice", password: "the-wrong-password" },
+      }),
+      store,
+    );
+
+    expect(locked.status).toBe(429);
+    expect((await locked.json()).error.code).toBe("sign_in_locked");
+    expect(locked.headers.get("retry-after")).toMatch(/^\d+$/);
+  });
+
+  it("B6 returns the same message for an unknown name and a wrong password", async () => {
+    const store = memoryStore();
+    await signedUp(store, "alice");
+    const wrong = await route(
+      post("/api/backend/account?mode=sign-in", { account: { username: "alice", password: "bad-password" } }),
+      store,
+    );
+    resetSignInLimits();
+    const unknown = await route(
+      post("/api/backend/account?mode=sign-in", { account: { username: "nobody", password: "bad-password" } }),
+      store,
+    );
+
+    expect(unknown.status).toBe(wrong.status);
+    expect(await unknown.json()).toEqual(await wrong.json());
+  });
+
+  it("B10 refuses every call when the session secret is missing", async () => {
+    const response = await backendRoute(
+      get("/api/backend/tools"),
+      { DB: { prepare() { throw new Error("must not run"); } } },
+      "/api/backend/tools",
+    );
+
+    expect(response.status).toBe(503);
+    expect((await response.json()).error.code).toBe("no_session_secret");
   });
 
   it("refuses every call when the site has no database", async () => {

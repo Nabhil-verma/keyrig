@@ -89,16 +89,24 @@ function configured(env) {
     typeof env.CF_AI_TOKEN === "string" &&
     env.CF_AI_TOKEN.length > 0 &&
     typeof env.HOSTED_ACCESS_CODE === "string" &&
-    env.HOSTED_ACCESS_CODE.length >= 8
+    env.HOSTED_ACCESS_CODE.length >= 8 &&
+    typeof env.HOSTED_IP_SALT === "string" &&
+    env.HOSTED_IP_SALT.length >= 16
   );
 }
 
+// B10: no literal fallback. A short or missing salt signs no session.
 function saltOf(env) {
-  return env.HOSTED_IP_SALT ?? "keyrig";
+  const salt = env === undefined || env === null ? undefined : env.HOSTED_IP_SALT;
+  return typeof salt === "string" && salt.length >= 16 ? salt : null;
 }
 
 async function sessionOf(request, env) {
-  return readSession(readCookie(request.headers.get("cookie")), saltOf(env));
+  const salt = saltOf(env);
+  if (salt === null) {
+    return null;
+  }
+  return readSession(readCookie(request.headers.get("cookie")), salt);
 }
 
 async function hostedPage(request, env) {

@@ -76,8 +76,23 @@ depend on it.
 | `/api/backend/roles` | POST | owner or admin | Change one role. |
 
 The password row holds a PBKDF2-SHA-256 salt and hash with 100,000 iterations. The session is the signed
-cookie from `hosted.mjs` under the name `keyrig_backend`. `BACKEND_SESSION_SALT` is optional: it falls
-back to `HOSTED_IP_SALT`, then to `keyrig`.
+cookie from `hosted.mjs` under the name `keyrig_backend`.
+
+`BACKEND_SESSION_SALT` is required and must be at least 16 characters. There is no fallback: without it
+the backend refuses every call with `no_session_secret`.
+
+`FIRST_OWNER_TOKEN` is required for the first sign-up on a new deployment. Send it in the
+`x-keyrig-setup-token` header. A site with no accounts refuses the first sign-up when the token is
+missing or wrong, so the first visitor cannot claim a new deployment.
+
+Account names are case-insensitive. The backend writes and reads the lower-case form. On the first
+call, an old mixed-case row is moved to lower case when no two rows differ only by case. If two rows do
+differ only by case, keyrig changes nothing and writes an `account_case_conflict` note in
+`backend_meta`; no account is deleted.
+
+Sign-in is limited to 5 failures in 15 minutes for one account name and 20 for one address, with a
+15-minute lock. A wrong password and an unknown name return the same message, and an unknown name runs
+the same PBKDF2 work.
 
 The rows live in `backend_accounts`, `backend_sessions`, `backend_tools`, `backend_tool_data`,
 `backend_requests`, `backend_request_meta`, `backend_request_votes` and `backend_votes`. The Worker
@@ -100,6 +115,8 @@ The route needs three secrets, set in Sites → Secrets:
 | `CF_ACCOUNT_ID` | The Cloudflare account id that owns Workers AI. |
 | `CF_AI_TOKEN` | An API token with the Workers AI Read and Edit permissions. |
 | `HOSTED_IP_SALT` | Any long random text, used to hash an address. |
+
+Copy `.env.example` for the full list. Do not commit a real value.
 
 Until all three are set, both paths return 503 with "The hosted model is not set up on this site."
 A missing `DB` binding returns the same 503, so the route never runs uncapped.

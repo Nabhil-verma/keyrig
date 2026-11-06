@@ -37,18 +37,78 @@ export const ROLE_RANK = Object.freeze({ owner: 3, admin: 2, member: 1, viewer: 
 const NOT_SET_UP = "The keyrig backend is not set up on this site.";
 const SIGN_IN_FIRST = "Sign in to use the keyrig backend.";
 const ACCOUNT_NAME = /^[A-Za-z0-9._-]{3,32}$/;
+const REFUSED = "That account name and password do not match.";
+
+/** B5: the first owner of a new deployment needs this header and secret. */
+export const FIRST_OWNER_SETUP_HEADER = "x-keyrig-setup-token";
+/** B6: sign-in limits. One window, counted by account name and by address. */
+export const SIGN_IN_WINDOW_MS = 15 * 60_000;
+export const SIGN_IN_LOCK_MS = 15 * 60_000;
+export const SIGN_IN_MAX_NAME_FAILURES = 5;
+export const SIGN_IN_MAX_ADDRESS_FAILURES = 20;
+
+const signInFailures = new Map();
+
+/** Test-only: a suite starts with no counters from an earlier test. */
+export function resetSignInLimits() {
+  signInFailures.clear();
+}
+
+function failureBucket(key, now) {
+  const entry = signInFailures.get(key);
+  if (!entry || now - entry.firstAt > SIGN_IN_WINDOW_MS) {
+    return { count: 0, firstAt: now, lockedUntil: 0 };
+  }
+  return entry;
+}
+
+function lockedSeconds(key, now) {
+  const entry = signInFailures.get(key);
+  return entry && entry.lockedUntil > now ? Math.ceil((entry.lockedUntil - now) / 1000) : 0;
+}
+
+function addFailure(key, now, maximum) {
+  const entry = failureBucket(key, now);
+  entry.count += 1;
+  if (entry.count >= maximum) {
+    entry.lockedUntil = now + SIGN_IN_LOCK_MS;
+  }
+  signInFailures.set(key, entry);
+}
+
+function clearFailures(keys) {
+  for (const key of keys) {
+    signInFailures.delete(key);
+  }
+}
+
+/** B7: one spelling for a name. The row and the lookup use this form. */
+export function normalizeAccountName(name) {
+  return typeof name === "string" ? name.trim().toLowerCase() : "";
+}
+
+/** B10: a missing or short session secret stops the backend. */
+export function sessionSecret(env) {
+  const secret = env === undefined || env === null ? undefined : env.BACKEND_SESSION_SALT;
+  return typeof secret === "string" && secret.length >= 16 ? secret : null;
+}
 
 /** The same shapes as `packages/shared/src/redact.ts` (KS-03). Keep in step. */
 const SECRET_PATTERNS = [
-  /sk-ant-[A-Za-z0-9_-]{20,}/g,
-  /sk-proj-[A-Za-z0-9_-]{20,}/g,
-  /sk-[A-Za-z0-9]{20,}/g,
+  /(?<![A-Za-z0-9])sk-ant-[A-Za-z0-9_-]{20,}/g,
+  /(?<![A-Za-z0-9])sk-proj-[A-Za-z0-9_-]{20,}/g,
+  /(?<![A-Za-z0-9])sk-svcacct-[A-Za-z0-9_-]{20,}/g,
+  /(?<![A-Za-z0-9])sk-admin-[A-Za-z0-9_-]{20,}/g,
+  /(?<![A-Za-z0-9])sk-or-v1-[A-Za-z0-9_-]{20,}/g,
+  /(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}/g,
+  /(?<![A-Za-z0-9])gsk_[A-Za-z0-9_-]{20,}/g,
+  /(?<![A-Za-z0-9])xai-[A-Za-z0-9_-]{20,}/g,
+  /(?<![A-Za-z0-9])pplx-[A-Za-z0-9_-]{20,}/g,
   /AIza[0-9A-Za-z_-]{35}/g,
-  /ghp_[A-Za-z0-9]{36}/g,
-  /gho_[A-Za-z0-9]{36}/g,
-  /github_pat_[A-Za-z0-9_]{22,}/g,
-  /xox[baprs]-[A-Za-z0-9-]{10,}/g,
-  /hf_[A-Za-z0-9]{30,}/g,
+  /(?<![A-Za-z0-9])gh[pous]_[A-Za-z0-9]{30,}/g,
+  /(?<![A-Za-z0-9])github_pat_[A-Za-z0-9_]{22,}/g,
+  /(?<![A-Za-z0-9])xox[baprs]-[A-Za-z0-9-]{10,}/g,
+  /(?<![A-Za-z0-9])hf_[A-Za-z0-9]{30,}/g,
   /(?<=Bearer\s)[A-Za-z0-9._~+/-]{8,}=*/g,
   /(?<=[?&](?:api_key|apikey|key|token|access_token)=)[^&\s#]+/gi,
   /(?<=(?:x-api-key|x-goog-api-key)["']?\s*[:=]\s*["']?)[A-Za-z0-9._-]{8,}/gi,
@@ -384,7 +444,11 @@ export function backendCookie(value) {
 }
 
 function saltOf(env) {
-  return env.BACKEND_SESSION_SALT ?? env.HOSTED_IP_SALT ?? "keyrig";
+  const secret = sessionSecret(env);
+  if (secret === null) {
+    throw new Error("The backend has no session secret.");
+  }
+  return secret;
 }
 
 function json(status, body, headers = {}) {
@@ -475,7 +539,7 @@ async function accountRoute(request, env, store, url) {
     return problem(400, "account_invalid", invalid);
   }
 
-  const username = account.username.trim();
+  const username = normalizeAccountName(account.username);
   const password = account.password;
   let existing = await store.accountByName(username);
 
@@ -483,13 +547,45 @@ async function accountRoute(request, env, store, url) {
     if (existing !== null) {
       return problem(409, "account_exists", "That account is already on this site. Sign in instead.");
     }
+    // B5: the first person on a new deployment must hold the setup token.
+    if ((await store.listAccounts()).length === 0) {
+      const expected = typeof env.FIRST_OWNER_TOKEN === "string" ? env.FIRST_OWNER_TOKEN : "";
+      const given = request.headers.get(FIRST_OWNER_SETUP_HEADER) ?? "";
+      if (expected.length < 16 || !safeEqual(given, expected)) {
+        return problem(
+          403,
+          "setup_token_required",
+          "This new site needs its first-owner setup token. Set FIRST_OWNER_TOKEN on the server and send it in the x-keyrig-setup-token header.",
+        );
+      }
+    }
     const created = await store.createAccount({ username, password: await hashPassword(password) });
     if (created === null) {
       return problem(409, "account_exists", "That account is already on this site. Sign in instead.");
     }
     existing = created;
-  } else if (existing === null || !(await verifyPassword(password, existing.password))) {
-    return problem(403, "account_refused", "That account name and password do not match.");
+  } else {
+    const now = Date.now();
+    const address = request.headers.get("cf-connecting-ip") ?? "unknown";
+    const keys = [`name:${username}`, `address:${address}`];
+    const wait = Math.max(lockedSeconds(keys[0], now), lockedSeconds(keys[1], now));
+    if (wait > 0) {
+      return problem(429, "sign_in_locked", "Too many sign-in attempts. Wait, then try again.", {
+        "retry-after": String(wait),
+      });
+    }
+    const accepted =
+      existing !== null ? await verifyPassword(password, existing.password) : false;
+    if (existing === null) {
+      // B6: an unknown name costs the same PBKDF2 work as a wrong password.
+      await hashPassword(password);
+    }
+    if (!accepted) {
+      addFailure(keys[0], now, SIGN_IN_MAX_NAME_FAILURES);
+      addFailure(keys[1], now, SIGN_IN_MAX_ADDRESS_FAILURES);
+      return problem(403, "account_refused", REFUSED);
+    }
+    clearFailures(keys);
   }
 
   const session = await issueSession(saltOf(env));
@@ -713,7 +809,7 @@ async function rolesRoute(request, env, store) {
   if (account === null || typeof account !== "object" || Array.isArray(account)) {
     return problem(400, "account_invalid", "A role change names one account and one role.");
   }
-  const target = typeof account.username === "string" ? account.username.trim() : "";
+  const target = normalizeAccountName(account.username);
   const targetRow = await store.accountByName(target);
   if (targetRow === null) {
     return problem(404, "account_unknown", "That account is not on this site.");
@@ -760,6 +856,7 @@ export async function routeWithStore(request, env, pathname, store) {
 
 const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS backend_accounts (username TEXT PRIMARY KEY, role TEXT NOT NULL, password TEXT NOT NULL, created_at TEXT NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS backend_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS backend_sessions (id TEXT PRIMARY KEY, username TEXT NOT NULL, expires INTEGER NOT NULL)",
   "CREATE TABLE IF NOT EXISTS backend_tools (id TEXT PRIMARY KEY, name TEXT NOT NULL, publisher TEXT NOT NULL, risk TEXT NOT NULL, description TEXT NOT NULL, created_at TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS backend_tool_data (tool_id TEXT PRIMARY KEY, definition TEXT, permissions TEXT NOT NULL, version INTEGER NOT NULL, tags TEXT NOT NULL)",
@@ -782,6 +879,30 @@ export function d1Store(db) {
     if (schema === undefined) {
       schema = (async () => {
         await db.exec(SCHEMA.join(";\n"));
+        // B7: move an old mixed-case name to lower case. If two rows differ
+        // only by case, change nothing and keep a conflict note. No row is
+        // deleted, so an owner can resolve the pair by hand.
+        const duplicates = await db
+          .prepare(
+            "SELECT lower(username) AS name, COUNT(*) AS n FROM backend_accounts GROUP BY lower(username) HAVING COUNT(*) > 1",
+          )
+          .all();
+        const names = (duplicates?.results ?? [])
+          .map((row) => row.name)
+          .filter((name) => typeof name === "string");
+        if (names.length > 0) {
+          await db
+            .prepare(
+              "INSERT INTO backend_meta (key, value) VALUES ('account_case_conflict', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            )
+            .bind(JSON.stringify(names))
+            .run();
+        } else {
+          await db.exec("UPDATE backend_accounts SET username = lower(username) WHERE username <> lower(username)");
+          await db.exec(
+            "CREATE UNIQUE INDEX IF NOT EXISTS backend_accounts_name_nocase ON backend_accounts(lower(username))",
+          );
+        }
       })().catch((error) => {
         schema = undefined;
         throw error;
@@ -807,11 +928,16 @@ export function d1Store(db) {
 
   return {
     accountByName: (username) =>
-      first("SELECT username, role, password FROM backend_accounts WHERE username = ?", username),
+      first(
+        "SELECT username, role, password FROM backend_accounts WHERE lower(username) = ? ORDER BY created_at ASC LIMIT 1",
+        normalizeAccountName(username),
+      ),
     createAccount: ({ username, password }) =>
       first(
-        "INSERT INTO backend_accounts (username, role, password, created_at) VALUES (?, CASE WHEN (SELECT COUNT(*) FROM backend_accounts) = 0 THEN 'owner' ELSE 'viewer' END, ?, ?) ON CONFLICT(username) DO NOTHING RETURNING username, role",
-        username,
+        // B5: one statement decides the first owner. SQLite runs each write in
+        // turn, so two sign-ups can never both see no owner.
+        "INSERT INTO backend_accounts (username, role, password, created_at) VALUES (?, CASE WHEN NOT EXISTS (SELECT 1 FROM backend_accounts WHERE role = 'owner') THEN 'owner' ELSE 'viewer' END, ?, ?) ON CONFLICT(username) DO NOTHING RETURNING username, role",
+        normalizeAccountName(username),
         password,
         new Date().toISOString(),
       ),
@@ -927,6 +1053,14 @@ export function d1Store(db) {
 export async function backendRoute(request, env, pathname) {
   if (env === undefined || env === null || env.DB === undefined || env.DB === null) {
     return problem(503, "no_database", NOT_SET_UP);
+  }
+  // B10: no fallback secret. A backend without one refuses to run.
+  if (sessionSecret(env) === null) {
+    return problem(
+      503,
+      "no_session_secret",
+      "The keyrig backend has no session secret. Set BACKEND_SESSION_SALT to a long random value.",
+    );
   }
   try {
     return await routeWithStore(request, env, pathname, d1Store(env.DB));

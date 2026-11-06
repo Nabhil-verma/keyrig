@@ -28,7 +28,7 @@ import worker from "./worker.mjs";
 const MODEL = HOSTED_MODELS[0].id;
 const ACCOUNT = "a".repeat(32);
 const CODE = "correct-horse-battery-staple";
-const SALT = "salt";
+const SALT = "test-hosted-salt-0123456789";
 
 function message(text = "Hello") {
   return [{ role: "user", content: text }];
@@ -254,6 +254,20 @@ describe("the hosted route", () => {
       environment({ HOSTED_ACCESS_CODE: "" }),
     );
     expect(response.status).toBe(503);
+  });
+
+  it("B10 refuses the hosted sign-in without a long salt", async () => {
+    const response = await worker.fetch(
+      new Request("https://keyrig.freebuff.page/hosted", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: `code=${encodeURIComponent(CODE)}`,
+      }),
+      environment({ HOSTED_IP_SALT: "short" }),
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("set-cookie")).toBeNull();
   });
 
   it("offers the unlock page", async () => {
