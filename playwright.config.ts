@@ -39,5 +39,13 @@ export default defineConfig({
       timeout: 120_000,
       stdout: "pipe",
     },
+    // PV-01: the offline test needs the production build and its service worker.
+    {
+      command: "npm run build --workspace @keyrig/web && npm run preview:e2e --workspace @keyrig/web",
+      url: "http://127.0.0.1:5200",
+      reuseExistingServer: false,
+      timeout: 180_000,
+      stdout: "pipe",
+    },
   ],
 });
