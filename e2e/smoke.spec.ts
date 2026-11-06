@@ -20,6 +20,11 @@ async function closeDrawer(page: Page): Promise<void> {
 
 /** The route sits in one popover, so the chat keeps its width. */
 async function openRoute(page: Page): Promise<void> {
+  // The workspace opens on Home, where the route button is not rendered.
+  const chatTab = page.getByRole("tab", { name: "Chat" });
+  if ((await chatTab.getAttribute("aria-selected")) !== "true") {
+    await chatTab.click();
+  }
   if ((await page.locator(".ws-popover").count()) === 0) {
     await page.getByRole("button", { name: "Provider and model" }).click();
   }

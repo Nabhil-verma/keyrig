@@ -20,6 +20,8 @@ async function setup(page: Page, username: string, keys: TestKey[]): Promise<voi
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByLabel("Repeat the password").fill(PASSWORD);
   await page.locator(".auth-submit").click();
+  // The workspace opens on Home, where the route button is not rendered.
+  await page.getByRole("tab", { name: "Chat" }).click();
 
   await page.getByRole("button", { name: "Keys", exact: true }).click();
   for (const [index, key] of keys.entries()) {

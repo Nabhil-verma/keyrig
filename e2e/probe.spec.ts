@@ -18,6 +18,7 @@ test("probe the model list through the workspace", async ({ page }) => {
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByLabel("Repeat the password").fill(PASSWORD);
   await page.locator(".auth-submit").click();
+  await page.getByRole("tab", { name: "Chat" }).click();
 
   await page.getByRole("button", { name: "Keys", exact: true }).click();
   await page.locator("#key-provider").selectOption("openai-compatible");
