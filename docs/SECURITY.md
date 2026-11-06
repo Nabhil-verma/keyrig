@@ -83,5 +83,63 @@ cookie from `hosted.mjs` under the name `keyrig_backend`.
 - `packages/shared/src/tests/publish.test.ts`: PR-01 for the publish scan.
 - `packages/core/src/tests/sandbox.test.ts`: PR-01 for the tool sandbox.
 - `sites-preview/backend.test.mjs`: the allowlist, the publish scan, the accounts, the roles, the marketplace,
-  the feature requests and the votes.
+  the feature requests, the votes, the setup token, the sign-in limits and the missing secret.
+- `sites-preview/d1-migration.test.mjs`: the case-insensitive account-name migration, including the
+  conflict case that deletes nothing.
+- `sites-preview/hosted.test.mjs`: the hosted salt requirement and the hosted session.
 - `npm run check:layers`: the guards stay in `shared` and `core`, and neither imports a higher layer.
+
+## Threat model (2026-11-04)
+
+### What keyrig protects
+
+- A provider key in the browser. It is encrypted with AES-GCM and a PBKDF2 key from the passphrase. The
+  vault never writes plain text, a label or the last four characters (KS-02, KS-04).
+- A key in any text that leaves a subsystem: errors, logs, exports, MCP replies, tool results and
+  published items. The one redactor in `packages/shared/src/redact.ts` masks every known provider prefix
+  (KS-03).
+- The vault from a tool. A tool runs in a worker with no vault object. The worker global has no network
+  path unless the tool holds the `network` permission (PR-01).
+- A second tab from overwriting a newer vault. Every write checks a generation counter, and a `storage`
+  event signs the other tab out (B8).
+- A new deployment from the first visitor. The first account needs `FIRST_OWNER_TOKEN` (B5).
+- The backend from missing configuration. It refuses every call without `BACKEND_SESSION_SALT` (B10).
+- The hosted page from a forged session. It signs with `HOSTED_IP_SALT`, has no literal fallback, and
+  refuses the unlock form when the salt is missing or shorter than 16 characters (B10).
+
+### What keyrig does not protect
+
+- A person with the browser profile and the passphrase. They can read the vault. Keyrig is not a defense
+  against the device owner.
+- A malicious provider. A request sends the prompt to the provider that the person chose.
+- A tool with the `network` permission. That permission exists to send data, and the warning says so.
+- A custom remote base URL under the strict CSP. The policy lists the bundled providers and localhost.
+  A remote OpenAI-compatible host is blocked until it is added to the policy. This is a deliberate limit,
+  not a silent fallback.
+- XSS in the app itself. The CSP helps, and the production header allows only same-origin scripts. The
+  app has no nonce-based policy.
+
+### Changes in this pass
+
+- B1. The vault stores the work factor that opened it. `persist` writes that value, `changePassphrase`
+  writes the build default, and an old count is upgraded at unlock. A count outside 1,000 to 2,000,000 is
+  a hard error. The vault format and `VAULT_SCHEMA_VERSION` are unchanged.
+- B2. The worker deletes `fetch`, `XMLHttpRequest`, `EventSource`, `WebSocket`, `WebTransport`,
+  `RTCPeerConnection`, `importScripts`, nested workers, `BroadcastChannel`, the storage globals and
+  `navigator.sendBeacon`. The properties are non-writable and the global is frozen. The tool body is put
+  in the worker source, so the sandbox needs no `eval` or `new Function`. A real Chromium Worker test
+  covers the blocked paths and the permitted network path.
+- B3. `index.html` has a CSP meta tag. `vercel.json` and `public/_headers` send the strict production
+  policy: `script-src 'self'`, `worker-src 'self' blob:`, `object-src 'none'`, `frame-ancestors 'none'`
+  and a narrow `connect-src`. The policy allows the provider hosts, `https://models.dev` for the model
+  catalog and localhost. `public/_redirects` keeps the SPA rule, because that file takes no headers.
+- B4. The redactor patterns come from `PROVIDER_KEY_PREFIXES`, and every manifest names its prefixes or
+  an explicit empty list.
+- B5. The first owner is decided in one SQL statement. A first sign-up needs the setup token.
+- B6. Sign-in allows 5 failures for a name and 20 for an address in 15 minutes, then locks for 15
+  minutes. An unknown name runs the same PBKDF2 work and returns the same message.
+- B7. Account names are lower-case on write and lookup. A migration moves old names when no two rows
+  differ only by case. If two rows do, keyrig changes nothing and records `account_case_conflict`.
+- B8. A generation counter is checked before every vault write. Another tab's write signs this tab out.
+- PR-01. The tool warning and the marketplace card show `Can send data out` for the network permission.
+- PV-01. The service worker caches the shell only. It never caches `/api/` and never reads the vault.

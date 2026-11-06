@@ -140,6 +140,52 @@ and no token.
 | Every other provider still needs a key | `chat.test.ts`: "still refuses a provider that needs a key" |
 | A same-origin path is an allowed base URL | `packages/providers/src/tests/manifest.test.ts`: "allows a same-origin path and still blocks a protocol-relative host" |
 
+## Safety fixes and backlog (2026-11-04)
+
+| Rule | Test |
+|---|---|
+| KS-02 a vault made with count A opens in a build with count B | `vault.test.ts`: "opens a vault made with count A in a build with count B and keeps every key operation" |
+| KS-02 changePassphrase writes the build default | `vault.test.ts`: "changePassphrase writes the build default count" |
+| KS-02 an out-of-range work factor is a hard error | `vault.test.ts`: "refuses a stored work factor of %i instead of falling back" |
+| KS-02 backlog #8 an import checks the work factor first | `accounts.test.ts`: "warns about an old work factor before the first write"; "refuses a count outside the range and writes nothing" |
+| KS-03 one test for each provider prefix | `redact-and-errors.test.ts`: "masks a %s key with the prefix %s" |
+| KS-03 the audit prefixes | `redact-and-errors.test.ts`: "masks the %s prefix that the audit found missing (%s)" |
+| KS-03 a manifest cannot forget its prefix | `manifest.test.ts`: "gives every manifest its key prefixes, or an explicit empty list" |
+| KS-03 normal text is not masked | `redact-and-errors.test.ts`: "does not mask a sk- shape in the middle of a normal word" |
+| B2 a worker has no network path | `toolSandboxNetwork.test.ts`: all cases, with `none` and with `files`; `e2e/worker-network.spec.ts`: a real Chromium Worker, including the permitted network path |
+| B3 the CSP allows the catalog host | `csp.test.ts`: the meta tag, `_headers` and `vercel.json` |
+| PR-01 #9 the network permission says that it sends data out | `toolRunner.test.ts`: "PR-01 #9 labels the network permission as a data risk" |
+| B8 a stale tab cannot overwrite the vault | `vault.test.ts`: "refuses a stale write after another tab saved the vault"; `e2e/two-tab.spec.ts` |
+| B8 #4 auto-lock by idle time and hidden time | `autoLock.test.ts`: all cases; `e2e/auto-lock.spec.ts`: a real tab and the clock |
+| B8 #4 the setting stays in range | `settings.test.ts`: "B8 #4 keeps a safe auto-lock choice and drops a bad one" |
+| Backlog #10 the vault scene is skippable, still and paused | `vaultScene.test.ts`: all cases; `e2e/vault-scene.spec.ts`: a real canvas, reduced motion, a hidden tab and a stored skip |
+| B5 the first sign-up needs the setup token | `backend.test.mjs`: "refuses the first sign-up without the setup token" |
+| B5 one owner under a concurrent first sign-up | `backend.test.mjs`: "makes exactly one owner when two first sign-ups overlap" |
+| B6 sign-in lockout | `backend.test.mjs`: "locks sign-in after five wrong passwords" |
+| B6 the same answer for an unknown name | `backend.test.mjs`: "returns the same message for an unknown name and a wrong password" |
+| B7 account names are case-insensitive | `backend.test.mjs`: "treats account names as case-insensitive" |
+| B7 the migration moves old names and deletes nothing | `d1-migration.test.mjs`: both cases |
+| B10 no session secret means no backend | `backend.test.mjs`: "B10 refuses every call when the session secret is missing" |
+| B10 no hosted salt means no hosted session | `hosted.test.mjs`: "B10 refuses the hosted sign-in without a long salt" |
+| PV-01 the offline shell caches only the shell | `offline.test.ts`: all cases; `e2e/offline.spec.ts`: a production preview reloads while offline |
+
+## Offline start check (PV-01)
+
+The automated check builds the app, starts a preview on port 5200, loads it twice so the worker controls
+the page, sets the browser offline and reloads. It also reads the cache and refuses an `/api/` entry.
+
+For a manual check with a real deploy:
+
+1. Run `npm run build`.
+2. Run `npm run preview --workspace @keyrig/web`.
+3. Open `http://127.0.0.1:5199/app` once and sign in.
+4. In the browser developer tools, open Application, Cache Storage. The cache `keyrig-shell-v1` holds
+   `/`, `/index.html`, `/theme-init.js` and `/manifest.webmanifest` only. It holds no `/api/` response.
+5. Set the network to Offline and reload. The app shell renders.
+6. Deploy a new build and reload twice. The cache name changes and the old cache is gone.
+
+The service worker is registered in the production build only. The development server stays uncached.
+
 ## Browser checks (manual, 2026-10-23)
 
 The web app ran against the local OpenAI-compatible test server (`npm run fake-provider`). It was the

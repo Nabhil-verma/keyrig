@@ -272,6 +272,31 @@ What keyrig does not do:
 
 ---
 
+## Security changes (2026-11-04)
+
+The latest pass closed nine audited bugs (B1 to B8 and B10) and added backlog items #1 to #10. The
+important changes:
+
+- The vault keeps the PBKDF2 count that opened it, so a write can no longer lock the keys out (B1).
+  `VAULT_SCHEMA_VERSION` did not change, and an old vault still opens.
+- The redactor builds its key patterns from the provider manifests. Chat exports, MCP results and tool
+  results pass through it (B4).
+- A tool worker removes `fetch`, `XMLHttpRequest`, `WebSocket` and the other network paths from its
+  global, then freezes the global (B2). A real Chromium test covers the worker and the permitted
+  network path. The app ships a CSP and security headers (B3).
+- A vault write checks a generation counter, and another tab signs this tab out (B8). The vault also
+  locks after an idle time and after the tab stays hidden (#4).
+- The backend needs `BACKEND_SESSION_SALT`, a first-owner setup token, sign-in limits and case-insensitive
+  account names (B5, B6, B7, B10).
+- The production app starts offline from an app-shell service worker. No API response or vault data is
+  cached (PV-01).
+- The first-run and vault-unlock stage shows a small 3D key and link (#10). The scene is skippable, keeps
+  a still frame under reduced motion and stops while the tab is hidden.
+
+See [docs/SECURITY.md](docs/SECURITY.md) for the threat model.
+
+---
+
 ## Testing
 
 Run the full suite with one command.
@@ -280,12 +305,15 @@ Run the full suite with one command.
 npm test
 ```
 
-The suite replays recorded provider traffic. It needs no network and no key. It covers the vault, the
-providers, the core, the guard prompt, the budget and the app stores.
+The suite runs **538 tests in 58 files**. It replays recorded provider traffic. It needs no network and
+no key. It covers the vault, the providers, the core, the guard prompt, the budget, the app stores, the
+tool sandbox, the backend stores and the offline shell.
 
 - [docs/TEST_PLAN.md](docs/TEST_PLAN.md) maps each rule to the test that proves it.
 - [packages/providers/src/tests/fixtures](packages/providers/src/tests/fixtures) holds the recorded traffic.
 - The browser checks in the test plan were run by hand against the local test provider.
+- `e2e/two-tab.spec.ts` proves that a second tab cannot keep a stale vault.
+- The offline check is a documented manual step in the test plan.
 
 Many test names include the rule ID that they check. The test plan lists the link between each rule and its tests.
 
