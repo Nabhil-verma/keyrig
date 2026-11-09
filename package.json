@@ -15,6 +15,7 @@
   "scripts": {
     "dev": "npm run dev --workspace @keyrig/web",
     "build": "npm run build --workspace @keyrig/web",
+    "preview": "npm run preview --workspace @keyrig/web",
     "test": "vitest run && node tools/check-layers.mjs",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

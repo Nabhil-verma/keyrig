@@ -1,380 +1,224 @@
 # keyrig
 
-**keyrig is a BYOK AI harness. One key connects to many AI models.**
+**keyrig is a BYOK AI harness where one key connects to many models.**
 
-You bring your own provider keys. keyrig stores them encrypted in your browser. Each prompt goes to the
-model that you choose. Every answer shows its model, its key label and its estimated cost.
-
-There is no keyrig server in local mode. The optional backend on freebuff serves only accounts, roles, the
-marketplace and feature requests. Telemetry is off.
+You bring your own provider keys. keyrig encrypts each key in your browser storage with WebCrypto and PBKDF2. Every response shows the model, the key label and the estimated cost. The app sends zero telemetry and requires no remote server in local mode.
 
 ---
 
 ## Contents
 
-- [Status](#status)
-- [Features](#features)
-- [The web app](#the-web-app)
-- [Quick start](#quick-start)
-- [Try it without a real key](#try-it-without-a-real-key)
+- [Prerequisites](#prerequisites)
+- [How to run](#how-to-run)
+  - [Quick start](#quick-start)
+  - [Try it without a real key](#try-it-without-a-real-key)
+- [Environment variables](#environment-variables)
 - [Commands](#commands)
-- [Project layout](#project-layout)
-- [Architecture](#architecture)
-- [Security model](#security-model)
+- [Features](#features)
+- [Modules and architecture](#modules-and-architecture)
 - [Testing](#testing)
-- [Design system](#design-system)
-- [Deploy the web app](#deploy-the-web-app)
-- [Not built yet](#not-built-yet)
 - [Contributing](#contributing)
+- [Documentation](#documentation)
 - [License](#license)
 
 ---
 
-## Status
+## Prerequisites
 
-Phase 1 is complete. It covers the safe core: the key vault, the provider manifests, the chat path,
-the error classes and the recorded-traffic tests.
+Make sure that your system meets these requirements:
 
-Phase 2 has a first web app. It covers keys, chat with provenance, the cost estimate, the model arena
-and a set of public pages.
-
-Phase 3 is partly built. It covers the agent loop, the tool set, the approval card, the browser
-workspace, the 3D scene and the two profile connections. The artifact canvas and chat checkpoints are
-not built yet.
-
-Phases 3 to 6 of the eight-feature brief are complete. Phase 3 adds the optional shared account and its
-roles. Phase 4 adds the marketplace. Phase 5 adds the feature requests. Phase 6 adds the streak. The
-owner removed Phase 7, so the Feature Scout and `/scout` are not built (D-17).
+- **Node.js**: version 22 or newer
+- **npm**: version 10 or newer (included with Node.js)
+- **Web browser**: a modern web browser with WebCrypto support
 
 ---
 
-## Features
+## How to run
 
-- **Encrypted key vault.** Your password opens the vault. The app encrypts each key before it saves the key.
-- **Vault export.** Download the encrypted vault and import it at another keyrig address. The vault password
-  opens the file. keyrig sends the file nowhere.
-- **Six built-in providers.** OpenAI, Anthropic, Freebuff, Ollama, LM Studio and any OpenAI-compatible server.
-  Freebuff needs a CORS header on its API before a browser can call it. The app shows a clear message until then.
-- **Streaming chat.** Answers stream in. Stop keeps the partial text and marks the answer as partial or aborted.
-- **Model picker.** A provider that lists its models fills the picker. You can reload the list, or type a name that the list does not have.
-- **MCP connectors.** Add a tool server in Settings, scan its tools, allow the ones you trust and run them.
-  keyrig sends the arguments and reads the text. It sends no key.
-- **Agent tools with approval.** Turn on the coding tools in Settings. Each tool states its risk and its
-  effect. keyrig shows one approval card before a risky call, and a deny stops the call.
-- **A browser workspace.** The agent reads and writes text files inside this browser, for one account.
-  A path that names a secret, such as `.env` or a `.pem` file, is blocked.
-- **3D scenes.** The model sends scene data and keyrig renders it with three.js. The renderer loads only
-  when a scene arrives.
-- **Google and GitHub links.** Add a Gmail recovery address with Google, and connect GitHub with the
-  device flow. The GitHub token stays in the encrypted vault.
-- **A commit switch.** The AI can commit only when your profile allows it, and every commit still asks you.
-  See [docs/AGENT_TOOLS.md](docs/AGENT_TOOLS.md) and [docs/CONNECTIONS.md](docs/CONNECTIONS.md).
-- **Provenance on every answer.** Each answer shows the model, the key label, the token counts and the price state.
-- **Cost estimate.** Catalog prices turn into an estimated cost. A price that keyrig does not know shows as unknown.
-- **Model arena.** Send one prompt to several models at once. Compare time, cost and answer. Continue with the answer you choose.
-- **Clear errors.** Each error shows a category, a short message and one fix action, such as "Open keys" or "Try again".
-- **Local models.** Ollama and LM Studio work with a local address. keyrig warns you about local and private addresses.
-- **Blocked addresses.** keyrig blocks cloud metadata addresses as a custom base URL.
-- **Light and dark themes.** The theme follows your choice and stays in this browser.
-- **Lock on sign-out.** Sign-out locks the vault. It drops the decrypted keys from memory and stops any stream.
-- **Roles.** The first account on the device is the owner. An owner or an admin grants a role. Each protected
-  feature checks a permission key, not a role name. See [docs/RBAC.md](docs/RBAC.md).
-- **A shared account.** The optional backend keeps the account name and the role for the marketplace and
-  the feature requests. It uses its own password, never the vault passphrase, and it receives no key,
-  chat, cost or streak (PR-01, PR-05).
-- **A marketplace.** Publish one local tool. The item holds the code and the permissions, never a key. An
-  install shows the same warning as a local tool and starts off.
-- **Feature requests.** Send one request, vote once and follow the status. Without the backend the list
-  stays on this device.
-- **A streak.** A run of local days with at least one answer. The record stays on this device and a missed
-  day ends the run. The best run stays.
+### Quick start
 
----
+Follow these steps to run the web app on your local machine:
 
-## The web app
+1. Clone the repository:
 
-The web app has six pages. Unknown paths show a not-found page.
+   ```bash
+   git clone https://github.com/Nabhil-verma/keyrig.git
+   cd keyrig
+   ```
 
-| Path | Page | What it shows |
-|---|---|---|
-| `/` | Home | The product, the routing visual, the features, the steps and a call to action. |
-| `/providers` | Providers | Each built-in provider, its auth type, its wire format, its base URL and its abilities. |
-| `/security` | Security | The product rules and the key vault rules. |
-| `/marketplace` | Marketplace | The published tools, the publish form and the install warning. |
-| `/requests` | Requests | The feature requests, the votes and the status. |
-| `/app` | Workspace | Sign-in, the key vault, the route (model and key), chat and the arena. |
-
-The workspace stays loaded while you read the public pages. Your session and your chat stay in memory.
-Sign-out clears them.
-
----
-
-## Quick start
-
-Requirements:
-
-- Node.js 22 or newer.
-- npm, which comes with Node.js.
-
-Steps:
-
-1. Install the dependencies.
+2. Install the workspace dependencies:
 
    ```bash
    npm install
    ```
 
-2. Run the tests. The tests need no real key and no network.
-
-   ```bash
-   npm test
-   ```
-
-3. Start the web app.
+3. Start the local development server:
 
    ```bash
    npm run dev
    ```
 
-4. Open `http://127.0.0.1:5199` in your browser.
-5. Open `/app`. Create an account on this device. Your username and password open the vault.
-6. Add a provider key. The app encrypts the key before it saves the key.
+4. Open `http://127.0.0.1:5199` in your web browser.
 
----
+5. Open `/app` to create an account on your device and set your vault password.
 
-## Try it without a real key
+6. Add a provider key to send prompts to a model.
 
-Use the local test provider to send prompts without a real key.
+### Try it without a real key
 
-1. Start the local test provider in a second terminal.
+You can test the app without a real provider key:
+
+1. Start the local test provider server in a second terminal:
 
    ```bash
    npm run fake-provider
    ```
 
-2. In the app, choose the provider **OpenAI-compatible**.
-3. Set the base URL to `http://127.0.0.1:8788/v1`.
-4. Pick the model from the list. The local server lists `fake-model` and `fake-model-small`.
-5. Add any key. The local server does not check the key.
-6. Send a prompt.
+2. In the app, select the provider **OpenAI-compatible**.
 
-WARNING: A key that starts with `bad-key` gets status 401. Use it to test the auth error path.
-The local server also streams slowly for a prompt that contains the word `slow`. Use it to test Stop.
+3. Set the base URL to `http://127.0.0.1:8788/v1`.
+
+4. Select a model from the list (`fake-model` or `fake-model-small`).
+
+5. Enter any text as the key. The local server does not check the key value.
+
+6. Send a prompt to the model.
+
+WARNING: A key that starts with `bad-key` returns HTTP status 401. Use this key prefix to test error handling. The test server also streams slowly when a prompt contains the word `slow`.
+
+---
+
+## Environment variables
+
+Local mode requires no environment variables. The app runs completely on your machine.
+
+For optional third-party profile links, copy the example file:
+
+```bash
+cp apps/web/.env.example apps/web/.env
+```
+
+| Variable                | Description                                                         |
+| ----------------------- | ------------------------------------------------------------------- |
+| `VITE_GOOGLE_CLIENT_ID` | Optional public client ID for the Google recovery email flow.       |
+| `VITE_GITHUB_CLIENT_ID` | Optional public client ID for the GitHub device authorization flow. |
+
+WARNING: Never place a private key, a client secret or an API credential in an environment file.
 
 ---
 
 ## Commands
 
-| Command | What it does |
-|---|---|
-| `npm install` | Install the workspace dependencies. |
-| `npm run dev` | Start the web app on `127.0.0.1:5199`. |
-| `npm test` | Run every test file and the layer check. |
-| `npm run typecheck` | Type check the repository and run the layer check. |
-| `npm run check:layers` | Check that no package imports a layer above it. |
-| `npm run build` | Build the web app into `apps/web/dist`. |
-| `npm run fake-provider` | Start the local test provider on `127.0.0.1:8788`. |
-| `npm run fake-mcp` | Start the local MCP test server on `127.0.0.1:8789`. |
-| `npm run test:e2e` | Run the Playwright browser tests against the two local test servers. |
+| Command                 | What it does                                              |
+| ----------------------- | --------------------------------------------------------- |
+| `npm install`           | Install the workspace dependencies.                       |
+| `npm run dev`           | Start the local development server on `127.0.0.1:5199`.   |
+| `npm run build`         | Build the web app into `apps/web/dist`.                   |
+| `npm run preview`       | Serve the production build on `127.0.0.1:5199`.           |
+| `npm test`              | Run the test suite and verify package layer rules.        |
+| `npm run typecheck`     | Run the TypeScript compiler and check layer rules.        |
+| `npm run check:layers`  | Check that package imports follow the layer hierarchy.    |
+| `npm run fake-provider` | Start the local test provider server on `127.0.0.1:8788`. |
+| `npm run fake-mcp`      | Start the local test MCP server on `127.0.0.1:8789`.      |
+| `npm run test:e2e`      | Run the Playwright browser tests.                         |
+| `npm run lint`          | Check code with the oxlint linter.                        |
+| `npm run format`        | Format repository files with Prettier.                    |
 
 ---
 
-## Project layout
+## Features
 
-```text
-keyrig code/
-├── apps/
-│   └── web/                    The browser app (React, Vite, Framer Motion)
-│       ├── index.html          The HTML shell. It loads src/app/main.tsx
-│       ├── public/             Brand files and fonts
-│       └── src/
-│           ├── app/            The shell: the entry, the routes and the page host
-│           ├── pages/          The six public pages
-│           ├── components/     The workspace panels, cards and drawers
-│           │   └── ui/         The brand marks and the icon set
-│           ├── stores/         Saved state in this browser
-│           ├── services/       Calls that leave the app: providers, OAuth, MCP
-│           ├── lib/            Pure helpers with no saved state
-│           └── styles/         The design system and the workspace styles
-├── packages/
-│   ├── shared/                 Error contract, redaction and schema versions
-│   ├── providers/              Manifests, catalog, cost, errors and wire formats
-│   └── core/                   Key vault, accounts, roles, tools and chat orchestration
-├── docs/                       Architecture, the file map, product rules, style and test plan
-├── e2e/                        The Playwright browser tests
-└── tools/                      The layer check and the two local test servers
-```
-
-[docs/MAP.md](docs/MAP.md) names each file and its job. Read it first when you look for a file.
+- **Encrypted key vault.** Protects your keys with PBKDF2 (600,000 iterations) and AES-GCM encryption in browser storage. Decrypted keys stay in memory only.
+- **Multiple providers.** Connects to OpenAI, Anthropic, Ollama, LM Studio, Freebuff and any OpenAI-compatible endpoint.
+- **Streaming chat.** Delivers model responses as a live text stream. The stop button retains partial text safely.
+- **Model arena.** Sends one prompt to multiple models at the same time. You can compare response time, token usage and cost.
+- **Provenance and cost transparency.** Displays the model name, the key label, the token usage and the estimated cost for each response.
+- **Agent tools and workspace.** Executes tool calls in a sandboxed browser workspace. Displays an approval card before risky tools run.
+- **MCP connectors.** Connects to external Model Context Protocol servers over SSE and HTTP transport.
+- **3D scene rendering.** Renders 3D scenes with three.js when a model outputs scene data.
+- **Encrypted export.** Exports the encrypted vault to a backup file that you can restore on another device.
+- **Zero telemetry by default.** Sends no prompts, keys, chat history or telemetry events to a remote server.
 
 ---
 
-## Architecture
+## Modules and architecture
 
-keyrig uses four layers. A lower layer never imports a higher layer.
-
-```text
-apps/web  ->  core  ->  providers  ->  shared
-```
-
-| Layer | Owns | Must not |
-|---|---|---|
-| `shared` | The error shape, redaction and schema versions. | Import a workspace package. |
-| `providers` | Manifests, the catalog, cost, error classes and wire formats. | Import `core` or an app. |
-| `core` | The key vault, the keyring, the usage bus and chat orchestration. | Import an app. |
-| `apps/*` | Screens and user input. | Write settings files directly. |
-
-`npm run check:layers` reads every import. It fails on an import that goes up a layer.
-
-### The request path
-
-Each request goes through three steps:
-
-1. **Intent.** A neutral request, for example a chat with streaming and a message list.
-2. **Named rule.** The rule comes from the provider manifest.
-3. **Wire format.** One adapter sends the request in the provider format.
-
-A new provider needs one manifest and one rule. It does not change `core`.
-
-### The key path
+The repository uses a strict four-layer architecture. A lower layer never imports from a higher layer.
 
 ```text
-password --PBKDF2-SHA256 (600,000 iterations)--> key --AES-GCM--> encrypted vault in browser storage
+apps/web  -->  packages/core  -->  packages/providers  -->  packages/shared
 ```
 
-- The vault holds one encrypted blob. The blob holds the key records.
-- The decrypted keys live in memory while the vault is unlocked.
-- Sign-out locks the vault and drops the decrypted keys.
+| Module / Package                           | Description                                                                                 | Layer Rule                             |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------- | -------------------------------------- |
+| [`packages/shared`](packages/shared)       | Contains common error contracts, schema versions and key redaction utilities.               | Imports nothing from the workspace.    |
+| [`packages/providers`](packages/providers) | Contains model manifests, the pricing catalog, wire adapters and error parsers.             | Imports from `packages/shared` only.   |
+| [`packages/core`](packages/core)           | Contains the key vault, identity, RBAC rules, the agent loop and chat orchestration.        | Imports from `shared` and `providers`. |
+| [`apps/web`](apps/web)                     | Single-page application built with React 19, Vite, Framer Motion and custom styling tokens. | Imports from all three packages.       |
+| [`tools/`](tools)                          | Contains development utilities, including mock servers and the layer boundary validator.    | Standalone Node.js scripts.            |
 
----
-
-## Security model
-
-These product rules are not optional. The app follows them. The full text is in
-[docs/PRODUCT_RULES.md](docs/PRODUCT_RULES.md).
-
-| Rule | Meaning |
-|---|---|
-| PR-01 | You own the keys. No key reaches the backend, a tool or a published item. Local mode has no server. |
-| PR-02 | Every answer shows its source: the model and the key label. |
-| PR-03 | Every request shows its cost. An unknown price shows as unknown. |
-| PR-04 | Failures are clear and safe. The app does not fail in silence. |
-| PR-05 | Telemetry is off by default. The backend receives only what you send on purpose. |
-
-What keyrig does not do:
-
-- It does not recover a forgotten password. Keep a copy of your password in a safe place.
-- It does not send a key to any endpoint except the one that you choose.
-- It does not send a chat, a prompt, a key, cost data, usage data or a streak to the backend.
-- It does not put a key, a key fragment or a request header in a log, an error or a chat message.
-- It does not guard a role with a server. The role records stay in this browser, so the checks stop mistakes,
-  not the device owner.
+The script `npm run check:layers` validates the layer import rules on every test and build run.
 
 ---
 
 ## Testing
 
-Run the full suite with one command.
+Run the full test suite with one command:
 
 ```bash
 npm test
 ```
 
-The suite replays recorded provider traffic. It needs no network and no key. It covers the vault, the
-providers, the core, the guard prompt, the budget and the app stores.
+The test suite runs with Vitest. It replays recorded provider traffic fixtures from [`packages/providers/src/tests/fixtures`](packages/providers/src/tests/fixtures). The unit tests require no network connection and no real key.
 
-- [docs/TEST_PLAN.md](docs/TEST_PLAN.md) maps each rule to the test that proves it.
-- [packages/providers/src/tests/fixtures](packages/providers/src/tests/fixtures) holds the recorded traffic.
-- The browser checks in the test plan were run by hand against the local test provider.
-
-Many test names include the rule ID that they check. The test plan lists the link between each rule and its tests.
-
----
-
-## Design system
-
-- **Amber is the key.** Use amber for a saved key, a selected key and a warning.
-- **Cyan is the AI link.** Use cyan for a live connection, a model and a stream.
-- **Fonts.** Inter for text and JetBrains Mono for code, labels and data.
-- **Motion.** Pages and cards use [Framer Motion](https://www.framer.com/motion/). The hero reacts to the pointer.
-  Motion follows the `prefers-reduced-motion` setting. Animations turn off for users who ask for less motion.
-- **Themes.** Dark is the default. Light is one click away. Both themes use the same tokens.
-
-The brand mark is a key head with a central hub and three nodes. The mark is in
-[apps/web/public/brand](apps/web/public/brand).
-
----
-
-## Deploy the web app
-
-Build the app. The output goes to `apps/web/dist`.
+To run additional test checks:
 
 ```bash
-npm run build
+# Verify TypeScript types and package layer rules
+npm run typecheck
+
+# Run browser end-to-end tests
+npm run test:e2e
 ```
 
-The app uses browser routing for `/providers`, `/security` and `/app`. Your host must serve
-`index.html` for these paths. Without that rule, a direct visit to a path returns 404.
-
-The repository has the rule for three hosts:
-
-- **Netlify and Cloudflare Pages.** `apps/web/public/_redirects` is copied into `dist`.
-- **Vercel.** `apps/web/vercel.json` rewrites every path to `index.html`. Set the project root to
-  `apps/web`.
-
-The static files keep their own paths. The rule applies only to paths without a file.
-
-WARNING: Serve the app over HTTPS in production. The vault uses WebCrypto, and browsers allow it only in
-a secure context. The localhost address counts as secure. Other plain HTTP addresses do not.
-
----
-
-## Not built yet
-
-- The desktop app and the OS keychain (KS-01).
-- Provider profiles, the fallback chain and model migration (PV-04, PV-06, PV-10).
-- Budgets and run limits (CO-02, CO-03).
-- The artifact canvas and chat checkpoints (Phase 3 and 4).
-- A shell or a run-command tool. keyrig runs in a browser, so it has no process to start.
-- Rule files for the agent (AS-08), tool hooks (AS-07) and the `@` and `/` context shortcuts (CX-04).
-- Phase 7, the Feature Scout and the `/scout` route. The owner removed Phase 7 on 2026-11-04 (D-17).
-- The `doctor` command and the CLI (KS-08, KS-09).
+See [docs/TEST_PLAN.md](docs/TEST_PLAN.md) for the complete list of requirement rules and tests.
 
 ---
 
 ## Contributing
 
-Read [AGENTS.md](AGENTS.md) before you change the repository. It covers the product rules, the writing style,
-the layer rules and the test rules.
+Read [AGENTS.md](AGENTS.md) before you edit files in this repository.
 
-Short version:
+Follow these contribution guidelines:
 
-1. Write UI text, docs and error text in the style of [docs/STYLE.md](docs/STYLE.md).
-2. Name the rule ID in the test name and in the commit message, for example `KS-06 classifies auth failures by HTTP status only`.
-3. Never write a key to a log, a file, a test, an export or a chat.
-4. Run `npm test` and `npm run typecheck` before you report a change as complete.
+1. Write all user interface text, documentation and error strings in ASD-STE100 style (see [docs/STYLE.md](docs/STYLE.md)).
+2. Use short sentences, the active voice and terms from [docs/GLOSSARY.md](docs/GLOSSARY.md).
+3. Include the requirement rule ID in test names and commit messages (example: `KS-06 classifies auth failures by HTTP status only`).
+4. Follow the layer import rules. Run `npm run check:layers` to confirm.
+5. Never commit a real key or write an unredacted secret to a log or test fixture.
+6. Run `npm test` and `npm run typecheck` to confirm your changes pass all checks.
 
 ---
 
 ## Documentation
 
-| Document | Contents |
-|---|---|
-| [docs/MAP.md](docs/MAP.md) | The file map: where each file is and what it does. |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layers, the request path and the key path. |
-| [docs/PRODUCT_RULES.md](docs/PRODUCT_RULES.md) | The product rules PR-01 to PR-05. |
-| [docs/SECURITY.md](docs/SECURITY.md) | The data that stays on the device and the data that the backend can store. |
-| [docs/STYLE.md](docs/STYLE.md) | The writing style for all keyrig text. |
-| [docs/GLOSSARY.md](docs/GLOSSARY.md) | The words that keyrig uses for each meaning. |
-| [docs/TEST_PLAN.md](docs/TEST_PLAN.md) | Each rule and the test that proves it. |
-| [docs/RBAC.md](docs/RBAC.md) | The permission keys, the roles and the rules. |
-| [docs/AGENT_TOOLS.md](docs/AGENT_TOOLS.md) | The tools, the risk levels, the approval card, the protected paths and the 3D scene. |
-| [docs/CONNECTIONS.md](docs/CONNECTIONS.md) | The Google recovery email and the GitHub commit account. |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | Decisions and their reasons. |
-| [docs/INSPIRED_BY.md](docs/INSPIRED_BY.md) | The projects that inspired keyrig. |
+| Document                                       | Contents                                                                |
+| ---------------------------------------------- | ----------------------------------------------------------------------- |
+| [docs/MAP.md](docs/MAP.md)                     | File map showing directory layout and file responsibilities.            |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)   | Layer hierarchy, request dispatch flow and key encryption architecture. |
+| [docs/PRODUCT_RULES.md](docs/PRODUCT_RULES.md) | The five core product rules (PR-01 through PR-05).                      |
+| [docs/SECURITY.md](docs/SECURITY.md)           | Local device boundaries and backend security model.                     |
+| [docs/STYLE.md](docs/STYLE.md)                 | ASD-STE100 writing rules for documentation and user interface text.     |
+| [docs/GLOSSARY.md](docs/GLOSSARY.md)           | Product terminology definitions and restricted terms.                   |
+| [docs/TEST_PLAN.md](docs/TEST_PLAN.md)         | Mapping between specification requirements and automated test files.    |
+| [docs/RBAC.md](docs/RBAC.md)                   | Role definitions and client-side permission checks.                     |
+| [docs/AGENT_TOOLS.md](docs/AGENT_TOOLS.md)     | Agent capabilities, risk classifications and sandboxed operations.      |
+| [docs/CONNECTIONS.md](docs/CONNECTIONS.md)     | Google account recovery and GitHub device-flow integration.             |
+| [docs/DECISIONS.md](docs/DECISIONS.md)         | Architecture decision records and product rationale.                    |
+| [docs/INSPIRED_BY.md](docs/INSPIRED_BY.md)     | Open-source inspirations for keyrig.                                    |
 
 ---
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
