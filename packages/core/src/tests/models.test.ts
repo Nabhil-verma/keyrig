@@ -33,7 +33,7 @@ describe("PV-11 the core reads the model list with the selected key", () => {
     let authorization = "";
     const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
       url = String(input);
-      authorization = (init?.headers as Record<string, string>).authorization ?? "";
+      authorization = (init?.headers as Record<string, string> | undefined)?.authorization ?? "";
       return new Response(JSON.stringify({ data: [{ id: "gpt-a" }, { id: "gpt-b" }] }), { status: 200 });
     }) as typeof fetch;
 

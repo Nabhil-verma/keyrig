@@ -1,6 +1,9 @@
 import type { AgentEvent, KeyrigScene } from "@keyrig/core";
 import { createId, type KeyrigErrorJSON } from "@keyrig/shared";
 
+/** BUG-03: the kind of turn. A retry uses the kind that started the turn. */
+export type TurnMode = "chat" | "tools";
+
 export interface UIMessage {
   id: string;
   role: "user" | "assistant";
@@ -17,8 +20,12 @@ export interface UIMessage {
   inputTokens?: number;
   outputTokens?: number;
   cachedTokens?: number;
+  /** BUG-04: the tokens written to the provider cache. */
+  cacheWriteTokens?: number;
   cacheState?: "hit" | "none";
   stopReason?: string;
+  /** BUG-03: the turn that made this answer. An old saved message has none. */
+  mode?: TurnMode;
   error?: KeyrigErrorJSON;
   /** MC-03: the tool calls of this answer. */
   tools?: AgentEvent[];
@@ -40,6 +47,8 @@ export interface ArenaResult {
   pricingKnown: boolean;
   inputTokens: number;
   outputTokens: number;
+  cachedTokens?: number;
+  cacheWriteTokens?: number;
   error?: KeyrigErrorJSON;
 }
 

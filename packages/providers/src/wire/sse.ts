@@ -31,6 +31,14 @@ async function readText(
       onText(decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n"));
     }
     onText(decoder.decode());
+  } catch (error) {
+    // A parser error must also stop the response body.
+    try {
+      await reader.cancel(error);
+    } catch {
+      // The stream already failed. There is nothing left to cancel.
+    }
+    throw error;
   } finally {
     reader.releaseLock();
   }

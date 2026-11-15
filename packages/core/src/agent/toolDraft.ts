@@ -76,7 +76,7 @@ function scriptDiff(before: string, after: string): ToolDiffLine[] {
   const left = before.split("\n");
   const right = after.split("\n");
   const table: number[][] = Array.from({ length: left.length + 1 }, () =>
-    new Array<number>(right.length + 1).fill(0),
+    Array.from({ length: right.length + 1 }, () => 0),
   );
   for (let i = left.length - 1; i >= 0; i -= 1) {
     for (let j = right.length - 1; j >= 0; j -= 1) {

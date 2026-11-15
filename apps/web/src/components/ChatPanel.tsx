@@ -224,8 +224,7 @@ export function ChatPanel({
   const handleErrorAction = (action: string, message: UIMessage): void => {
     if (action === "change_prompt") {
       const index = messages.findIndex((item) => item.id === message.id);
-      const previous =
-        index === -1 ? undefined : messages.slice(0, index).reverse().find((item) => item.role === "user");
+      const previous = messages.findLast((item, at) => at < index && item.role === "user");
       if (previous !== undefined) {
         const text = previous.display ?? previous.content;
         setDraft(text);
@@ -336,6 +335,9 @@ export function ChatPanel({
                   ) : null}
                   {message.cachedTokens !== undefined && message.cachedTokens > 0 ? (
                     <span>{message.cachedTokens.toLocaleString()} cached</span>
+                  ) : null}
+                  {message.cacheWriteTokens !== undefined && message.cacheWriteTokens > 0 ? (
+                    <span>{message.cacheWriteTokens.toLocaleString()} written</span>
                   ) : null}
                   {priceText(message) !== null ? (
                     <span className={message.pricingKnown ? "" : "ws-meta-warn"}>{priceText(message)}</span>

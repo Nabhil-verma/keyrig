@@ -22,6 +22,8 @@ const thread: StoredThread = {
       pricingKnown: true,
       inputTokens: 120,
       outputTokens: 30,
+      cachedTokens: 40,
+      cacheWriteTokens: 10,
       stopReason: "complete",
     },
   ],
@@ -35,6 +37,8 @@ describe("the thread export", () => {
     expect(markdown).toContain("## gpt-5.4");
     expect(markdown).toContain("key work");
     expect(markdown).toContain("120 in / 30 out");
+    expect(markdown).toContain("40 cached");
+    expect(markdown).toContain("10 written");
     expect(markdown).toContain("$0.00420 estimated");
   });
 
@@ -58,16 +62,36 @@ describe("the thread receipt", () => {
       answers: 1,
       inputTokens: 120,
       outputTokens: 30,
+      cachedTokens: 40,
+      cacheWriteTokens: 10,
       pricingKnown: true,
       models: ["gpt-5.4"],
       keyLabels: ["work"],
     });
   });
 
+  it("keeps a long token row inside the card", () => {
+    const big: StoredThread = {
+      ...thread,
+      messages: [
+        {
+          ...thread.messages[1]!,
+          inputTokens: 1_000_000,
+          outputTokens: 1_000_000,
+          cachedTokens: 1_000_000,
+          cacheWriteTokens: 1_000_000,
+        },
+      ],
+    };
+    expect(threadReceiptSvg(big)).toContain('font-size="13"');
+  });
+
   it("escapes the title and keeps the cost in the card", () => {
     const svg = threadReceiptSvg(thread);
     expect(svg).toContain("Plan &lt;the&gt; landing");
     expect(svg).toContain("$0.00420 estimated");
+    expect(svg).toContain("40 cached");
+    expect(svg).toContain("10 written");
     expect(svg).toContain("KEYRIG");
   });
 });

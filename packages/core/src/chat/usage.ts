@@ -15,6 +15,8 @@ export interface UsageEvent {
   inputTokens: number;
   outputTokens: number;
   cachedTokens?: number;
+  /** BUG-04: the tokens that keyrig wrote to the provider cache. */
+  cacheWriteTokens?: number;
   costUsd: number;
   pricingKnown: boolean;
   stopReason: StopReason;

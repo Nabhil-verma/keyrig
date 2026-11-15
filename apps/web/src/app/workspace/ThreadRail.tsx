@@ -1,4 +1,4 @@
-import { ROLE_LABELS, budgetState, can, type RoleId } from "@keyrig/core";
+import { ROLE_LABELS, budgetMessage, budgetState, can, type RoleId } from "@keyrig/core";
 import { formatUsd } from "@keyrig/providers";
 import type { ShelfTab } from "../../components/Shelf";
 import { MAX_THREADS, threadPreview, type StoredThread } from "../../stores/threads";
@@ -115,13 +115,16 @@ export function ThreadRail({
           <span>{budget.limitUsd === null ? "Today" : "Budget"}</span>
           <strong className="mono">
             {budget.limitUsd === null
-              ? formatUsd(budget.spentUsd)
-              : `${formatUsd(budget.spentUsd)} / ${formatUsd(budget.limitUsd)}`}
+              ? formatUsd(budget.spentUsd, budget.pricingKnown)
+              : `${formatUsd(budget.spentUsd, budget.pricingKnown)} / ${formatUsd(budget.limitUsd)}`}
           </strong>
         </div>
         <div className="ws-budget-bar" aria-hidden="true">
           <span style={{ width: `${Math.min(100, Math.round(budget.ratio * 100))}%` }} />
         </div>
+        {budget.level === "unknown" ? (
+          <p className="ws-rail-note">{budgetMessage(budget)}</p>
+        ) : null}
         {budgetStop ? (
           <button type="button" className="btn btn--ghost btn--sm" onClick={onContinue}>
             Continue this session

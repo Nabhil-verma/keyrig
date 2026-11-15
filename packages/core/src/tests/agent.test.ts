@@ -155,17 +155,38 @@ describe("AS-01 the agent loop", () => {
     expect(outcome.events[0]?.summary).toBe("Connect GitHub first.");
   });
 
-  it("does not start when the user stopped the turn", async () => {
+  it("PV-08 returns a stopped turn without a model call", async () => {
     const controller = new AbortController();
     controller.abort();
-    await expect(
-      runAgentTurn({
-        ...base,
-        signal: controller.signal,
-        callModel: async () => ({ text: "Hello", toolCalls: [] }),
-        approve: async () => "approve",
-        execute: async () => ({ ok: true, summary: "" }),
-      }),
-    ).rejects.toMatchObject({ category: "cancelled" });
+    const outcome = await runAgentTurn({
+      ...base,
+      signal: controller.signal,
+      callModel: async () => ({ text: "Hello", toolCalls: [] }),
+      approve: async () => "approve",
+      execute: async () => ({ ok: true, summary: "" }),
+    });
+
+    expect(outcome.aborted).toBe(true);
+    expect(outcome.text).toBe("");
+    expect(outcome.steps).toBe(0);
+  });
+
+  it("PV-08 keeps the text when the user stops a tool turn", async () => {
+    const controller = new AbortController();
+    const outcome = await runAgentTurn({
+      ...base,
+      enabled: ["list_files"],
+      signal: controller.signal,
+      callModel: async () => {
+        controller.abort();
+        return { text: "Half an answer", toolCalls: [call("list_files", {})] };
+      },
+      approve: async () => "approve",
+      execute: async () => ({ ok: true, summary: "" }),
+    });
+
+    expect(outcome.aborted).toBe(true);
+    expect(outcome.text).toBe("Half an answer");
+    expect(outcome.events).toHaveLength(0);
   });
 });

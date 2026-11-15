@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
-import { createMemoryStorage, type StorageLike } from "@keyrig/shared";
+import { readStoredDocument, writeStoredDocument } from "@keyrig/shared";
+import { browserStorage } from "../lib/storage";
 
 /**
  * AS-01 and AS-06: the agent settings of this device.
@@ -49,36 +50,15 @@ export function normalizeAgentSettings(input: unknown): AgentSettings {
   };
 }
 
-function deviceStorage(): StorageLike {
-  try {
-    const probe = "keyrig.agent.probe";
-    window.localStorage.setItem(probe, "1");
-    window.localStorage.removeItem(probe);
-    return window.localStorage;
-  } catch {
-    return createMemoryStorage();
-  }
-}
-
-const storage = deviceStorage();
+const storage = browserStorage();
 const listeners = new Set<() => void>();
 let snapshot: AgentSettings | null = null;
 
 function read(): AgentSettings {
-  let parsed: unknown = null;
-  try {
-    const raw = storage.getItem(AGENT_SETTINGS_STORAGE_KEY);
-    parsed = raw ? JSON.parse(raw) : null;
-  } catch {
-    parsed = null;
-  }
-  const body =
-    parsed !== null &&
-    typeof parsed === "object" &&
-    (parsed as { schemaVersion?: unknown }).schemaVersion === AGENT_SETTINGS_SCHEMA_VERSION
-      ? (parsed as { data?: unknown }).data
-      : null;
-  return normalizeAgentSettings(body);
+  return (
+    readStoredDocument(storage, AGENT_SETTINGS_STORAGE_KEY, AGENT_SETTINGS_SCHEMA_VERSION, normalizeAgentSettings) ??
+    normalizeAgentSettings(null)
+  );
 }
 
 export function getAgentSettings(): AgentSettings {
@@ -96,14 +76,7 @@ function subscribeAgentSettings(listener: () => void): () => void {
 export function writeAgentSettings(patch: Partial<AgentSettings>): AgentSettings {
   snapshot = normalizeAgentSettings({ ...getAgentSettings(), ...patch });
   try {
-    storage.setItem(
-      AGENT_SETTINGS_STORAGE_KEY,
-      JSON.stringify({
-        schemaVersion: AGENT_SETTINGS_SCHEMA_VERSION,
-        appliedMigrations: [],
-        data: snapshot,
-      }),
-    );
+    writeStoredDocument(storage, AGENT_SETTINGS_STORAGE_KEY, AGENT_SETTINGS_SCHEMA_VERSION, snapshot);
   } catch {
     // A full storage must not stop a settings change.
   }

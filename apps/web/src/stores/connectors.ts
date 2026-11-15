@@ -1,4 +1,4 @@
-import { createDocument, isVersionedDocument, type StorageLike } from "@keyrig/shared";
+import { readStoredDocument, writeStoredDocument, type StorageLike } from "@keyrig/shared";
 import { checkBaseUrl } from "@keyrig/providers";
 import { browserStorage } from "../lib/storage";
 
@@ -63,32 +63,15 @@ function isConnector(value: unknown): value is Connector {
 }
 
 function readAll(storage: StorageLike): Connector[] {
-  let raw: string | null;
-  try {
-    raw = storage.getItem(CONNECTORS_STORAGE_KEY);
-  } catch {
-    return [];
-  }
-  if (!raw) {
-    return [];
-  }
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (
-      !isVersionedDocument(parsed) ||
-      parsed.schemaVersion !== CONNECTORS_SCHEMA_VERSION ||
-      !Array.isArray(parsed.data)
-    ) {
-      return [];
-    }
-    return parsed.data.filter(isConnector);
-  } catch {
-    return [];
-  }
+  return (
+    readStoredDocument(storage, CONNECTORS_STORAGE_KEY, CONNECTORS_SCHEMA_VERSION, (data) =>
+      Array.isArray(data) ? data.filter(isConnector) : null,
+    ) ?? []
+  );
 }
 
 function writeAll(storage: StorageLike, connectors: Connector[]): void {
-  storage.setItem(CONNECTORS_STORAGE_KEY, JSON.stringify(createDocument(CONNECTORS_SCHEMA_VERSION, connectors)));
+  writeStoredDocument(storage, CONNECTORS_STORAGE_KEY, CONNECTORS_SCHEMA_VERSION, connectors);
 }
 
 function update(id: string, change: (connector: Connector) => Connector, storage: StorageLike): Connector {

@@ -6,6 +6,8 @@ export interface ReceiptTotals {
   answers: number;
   inputTokens: number;
   outputTokens: number;
+  cachedTokens: number;
+  cacheWriteTokens: number;
   costUsd: number;
   pricingKnown: boolean;
   models: string[];
@@ -17,6 +19,8 @@ export function receiptTotals(thread: StoredThread): ReceiptTotals {
   const keyLabels = new Set<string>();
   let inputTokens = 0;
   let outputTokens = 0;
+  let cachedTokens = 0;
+  let cacheWriteTokens = 0;
   let costUsd = 0;
   let pricingKnown = true;
   let answers = 0;
@@ -28,6 +32,8 @@ export function receiptTotals(thread: StoredThread): ReceiptTotals {
     answers += 1;
     inputTokens += message.inputTokens ?? 0;
     outputTokens += message.outputTokens ?? 0;
+    cachedTokens += message.cachedTokens ?? 0;
+    cacheWriteTokens += message.cacheWriteTokens ?? 0;
     costUsd += message.costUsd ?? 0;
     if (message.pricingKnown === false) {
       pricingKnown = false;
@@ -44,6 +50,8 @@ export function receiptTotals(thread: StoredThread): ReceiptTotals {
     answers,
     inputTokens,
     outputTokens,
+    cachedTokens,
+    cacheWriteTokens,
     costUsd,
     pricingKnown,
     models: [...models],
@@ -75,20 +83,30 @@ function list(values: string[], fallback: string): string {
 export function threadReceiptSvg(thread: StoredThread): string {
   const totals = receiptTotals(thread);
   const cost = totals.pricingKnown ? `${formatUsd(totals.costUsd, true)} estimated` : "cost unknown";
-  const rows: Array<[string, string]> = [
-    ["MODEL", list(totals.models, "no answer yet")],
-    ["KEY LABEL", list(totals.keyLabels, "no key")],
-    ["TOKENS", `${totals.inputTokens.toLocaleString()} in / ${totals.outputTokens.toLocaleString()} out`],
-    ["COST", cost],
+  const tokens = [`${totals.inputTokens.toLocaleString()} in / ${totals.outputTokens.toLocaleString()} out`];
+  if (totals.cachedTokens > 0) {
+    tokens.push(`${totals.cachedTokens.toLocaleString()} cached`);
+  }
+  if (totals.cacheWriteTokens > 0) {
+    tokens.push(`${totals.cacheWriteTokens.toLocaleString()} written`);
+  }
+  // A long token row gets a smaller font so the text stays inside the card.
+  const tokenText = tokens.join(" · ");
+  const tokenSize = tokenText.length > 74 ? 11 : tokenText.length > 44 ? 13 : undefined;
+  const rows: Array<{ label: string; value: string; size?: number }> = [
+    { label: "MODEL", value: list(totals.models, "no answer yet") },
+    { label: "KEY LABEL", value: list(totals.keyLabels, "no key") },
+    { label: "TOKENS", value: tokenText, ...(tokenSize !== undefined ? { size: tokenSize } : {}) },
+    { label: "COST", value: cost },
   ];
 
   const rowText = rows
     .map(
-      ([label, value], index) =>
+      ({ label, value, size }, index) =>
         `<text x="56" y="${238 + index * 42}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" fill="#7E8CA3" letter-spacing="2">${escapeXml(
           label,
         )}</text>` +
-        `<text x="200" y="${238 + index * 42}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" fill="#E8EDF5">${escapeXml(
+        `<text x="200" y="${238 + index * 42}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="${size ?? 17}" fill="#E8EDF5">${escapeXml(
           value,
         )}</text>`,
     )

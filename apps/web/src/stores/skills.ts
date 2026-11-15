@@ -1,4 +1,4 @@
-import { createDocument, isVersionedDocument, type StorageLike } from "@keyrig/shared";
+import { readStoredDocument, writeStoredDocument, type StorageLike } from "@keyrig/shared";
 import { browserStorage } from "../lib/storage";
 
 /**
@@ -32,28 +32,15 @@ function isSkill(value: unknown): value is Skill {
 }
 
 function readAll(storage: StorageLike): Skill[] {
-  let raw: string | null;
-  try {
-    raw = storage.getItem(SKILLS_STORAGE_KEY);
-  } catch {
-    return [];
-  }
-  if (!raw) {
-    return [];
-  }
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!isVersionedDocument(parsed) || parsed.schemaVersion !== SKILLS_SCHEMA_VERSION || !Array.isArray(parsed.data)) {
-      return [];
-    }
-    return parsed.data.filter(isSkill);
-  } catch {
-    return [];
-  }
+  return (
+    readStoredDocument(storage, SKILLS_STORAGE_KEY, SKILLS_SCHEMA_VERSION, (data) =>
+      Array.isArray(data) ? data.filter(isSkill) : null,
+    ) ?? []
+  );
 }
 
 function writeAll(storage: StorageLike, skills: Skill[]): void {
-  storage.setItem(SKILLS_STORAGE_KEY, JSON.stringify(createDocument(SKILLS_SCHEMA_VERSION, skills)));
+  writeStoredDocument(storage, SKILLS_STORAGE_KEY, SKILLS_SCHEMA_VERSION, skills);
 }
 
 export function listSkills(storage: StorageLike = browserStorage()): Skill[] {

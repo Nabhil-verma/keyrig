@@ -5,7 +5,7 @@ import {
   normalizeWorkspacePath,
   protectedReason,
 } from "@keyrig/core";
-import { KeyrigError, createDocument, isVersionedDocument, type StorageLike } from "@keyrig/shared";
+import { KeyrigError, readStoredDocument, writeStoredDocument, type StorageLike } from "@keyrig/shared";
 
 /**
  * AS-05: the workspace of the agent.
@@ -71,31 +71,17 @@ export class Workspace {
   }
 
   files(): WorkspaceFile[] {
-    let raw: string | null;
-    try {
-      raw = this.#storage.getItem(WORKSPACE_STORAGE_KEY);
-    } catch {
-      return [];
-    }
-    if (!raw) {
-      return [];
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return [];
-    }
-    if (!isVersionedDocument(parsed) || parsed.schemaVersion !== WORKSPACE_SCHEMA_VERSION) {
-      return [];
-    }
-    if (!Array.isArray(parsed.data)) {
-      return [];
-    }
-    return (parsed.data as unknown[])
-      .map(readFile)
-      .filter((file): file is WorkspaceFile => file !== null)
-      .sort((left, right) => left.path.localeCompare(right.path));
+    return (
+      readStoredDocument(this.#storage, WORKSPACE_STORAGE_KEY, WORKSPACE_SCHEMA_VERSION, (data) => {
+        if (!Array.isArray(data)) {
+          return null;
+        }
+        return (data as unknown[])
+          .map(readFile)
+          .filter((file): file is WorkspaceFile => file !== null)
+          .sort((left, right) => left.path.localeCompare(right.path));
+      }) ?? []
+    );
   }
 
   read(rawPath: unknown): WorkspaceFile | null {
@@ -173,10 +159,7 @@ export class Workspace {
 
   #persist(files: WorkspaceFile[]): void {
     try {
-      this.#storage.setItem(
-        WORKSPACE_STORAGE_KEY,
-        JSON.stringify(createDocument(WORKSPACE_SCHEMA_VERSION, files)),
-      );
+      writeStoredDocument(this.#storage, WORKSPACE_STORAGE_KEY, WORKSPACE_SCHEMA_VERSION, files);
     } catch {
       fail("storage_write_failed", "keyrig cannot save the file. The browser storage is full or blocked.");
     }

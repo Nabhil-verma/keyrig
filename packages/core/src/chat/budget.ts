@@ -9,7 +9,7 @@ export const BUDGET_WARNING_RATIO = 0.8;
 export const MIN_BUDGET_USD = 0.01;
 export const MAX_BUDGET_USD = 1000;
 
-export type BudgetLevel = "off" | "ok" | "warning" | "blocked";
+export type BudgetLevel = "off" | "ok" | "unknown" | "warning" | "blocked";
 
 export interface BudgetState {
   /** null means no limit. */
@@ -19,6 +19,8 @@ export interface BudgetState {
   /** The spent part of the limit, from 0 to 1 or more. 0 when the limit is off. */
   ratio: number;
   level: BudgetLevel;
+  /** PR-03: false when a request of today had no price. */
+  pricingKnown: boolean;
 }
 
 /** A count of money is never negative and never NaN. */
@@ -40,23 +42,35 @@ export function normalizeBudgetLimit(value: unknown): number | null {
   return Math.round(value * 100) / 100;
 }
 
-export function budgetState(spentUsd: number, limitUsd: number | null | undefined): BudgetState {
+export function budgetState(
+  spentUsd: number,
+  limitUsd: number | null | undefined,
+  pricingKnown = true,
+): BudgetState {
   const spent = normalizeSpend(spentUsd);
   const limit = normalizeBudgetLimit(limitUsd);
 
   if (limit === null) {
-    return { limitUsd: null, spentUsd: spent, remainingUsd: null, ratio: 0, level: "off" };
+    return { limitUsd: null, spentUsd: spent, remainingUsd: null, ratio: 0, level: "off", pricingKnown };
+  }
+
+  /** PR-03: a spend with no price cannot be counted, so the check cannot run. */
+  if (!pricingKnown) {
+    return { limitUsd: limit, spentUsd: spent, remainingUsd: null, ratio: 0, level: "unknown", pricingKnown };
   }
 
   const ratio = spent / limit;
   const remaining = Math.max(limit - spent, 0);
   const level: BudgetLevel = spent >= limit ? "blocked" : ratio >= BUDGET_WARNING_RATIO ? "warning" : "ok";
 
-  return { limitUsd: limit, spentUsd: spent, remainingUsd: remaining, ratio, level };
+  return { limitUsd: limit, spentUsd: spent, remainingUsd: remaining, ratio, level, pricingKnown };
 }
 
 /** One sentence for the user. It names the next step, not only the state. */
 export function budgetMessage(state: BudgetState): string | null {
+  if (state.level === "unknown") {
+    return "The cost today is unknown, so keyrig cannot check the budget. Use a model with a known price.";
+  }
   if (state.level === "warning") {
     const percent = Math.round(state.ratio * 100);
     return `The daily budget is ${percent} percent spent. Change the limit in Settings if you need more.`;

@@ -66,7 +66,7 @@ const SECRET_PATTERNS: readonly RegExp[] = [
   /(?<![A-Za-z0-9])github_pat_[A-Za-z0-9_]{22,}/g,
   /(?<![A-Za-z0-9])xox[baprs]-[A-Za-z0-9-]{10,}/g,
   /(?<![A-Za-z0-9])hf_[A-Za-z0-9]{30,}/g,
-  /(?<=Bearer\s)[A-Za-z0-9._~+/-]{8,}=*/g,
+  /(?<=Bearer\s)[A-Za-z0-9._~+/-]{8,}=*/gi,
   /(?<=[?&](?:api_key|apikey|key|token|access_token)=)[^&\s#]+/gi,
   /(?<=(?:x-api-key|x-goog-api-key)["']?\s*[:=]\s*["']?)[A-Za-z0-9._-]{8,}/gi,
 ];
@@ -121,19 +121,24 @@ export function redactDeep<T>(value: T, options: RedactOptions = {}, seen = new 
   }
   seen.add(value);
 
-  if (Array.isArray(value)) {
-    return value.map((item) => redactDeep(item, options, seen)) as unknown as T;
-  }
-
-  const output: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-    if (SENSITIVE_KEYS.test(key) && typeof item === "string") {
-      output[key] = REPLACEMENT;
-      continue;
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => redactDeep(item, options, seen)) as unknown as T;
     }
-    output[key] = redactDeep(item, options, seen);
+
+    const output: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      if (SENSITIVE_KEYS.test(key) && typeof item === "string") {
+        output[key] = REPLACEMENT;
+        continue;
+      }
+      output[key] = redactDeep(item, options, seen);
+    }
+    return output as unknown as T;
+  } finally {
+    // A shared reference is not a cycle. Remove the mark after the branch.
+    seen.delete(value);
   }
-  return output as unknown as T;
 }
 
 /**

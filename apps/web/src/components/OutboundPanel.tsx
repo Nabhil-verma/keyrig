@@ -19,6 +19,8 @@ interface OutboundPanelProps {
   priceIn: number | null;
   priceOut: number | null;
   spent: number;
+  /** PR-03: false when a request of today had no price. */
+  spendKnown: boolean;
   limit: number | null;
   days: SpendDay[];
   requests: UsageEvent[];
@@ -43,6 +45,7 @@ export function OutboundPanel({
   priceIn,
   priceOut,
   spent,
+  spendKnown,
   limit,
   days,
   requests,
@@ -98,7 +101,9 @@ export function OutboundPanel({
         <div className="ws-budget-row">
           <span>Today</span>
           <strong className="mono">
-            {limit === null ? `${formatUsd(spent)} spent` : `${formatUsd(spent)} / ${formatUsd(limit)}`}
+            {limit === null
+              ? `${formatUsd(spent, spendKnown)} spent`
+              : `${formatUsd(spent, spendKnown)} / ${formatUsd(limit)}`}
           </strong>
         </div>
         {limit === null ? null : (
@@ -114,7 +119,12 @@ export function OutboundPanel({
         )}
         <div className="ws-days" aria-label="The spend of the last seven days">
           {days.map((entry) => (
-            <span key={entry.day} className="ws-day" title={`${entry.day}: ${formatUsd(entry.usd)}`}>
+            <span
+              key={entry.day}
+              className="ws-day"
+              aria-label={`${entry.day}: ${formatUsd(entry.usd, entry.pricingKnown)}`}
+              title={`${entry.day}: ${formatUsd(entry.usd, entry.pricingKnown)}`}
+            >
               <span className="ws-day-bar" style={{ height: `${dayHeight(entry.usd, maxDay)}px` }} />
               <span className="ws-day-label">{entry.day.slice(5)}</span>
             </span>

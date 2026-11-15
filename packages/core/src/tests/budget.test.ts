@@ -18,6 +18,22 @@ describe("the daily budget (CO-02)", () => {
     expect(budgetState(2, 1).remainingUsd).toBe(0);
   });
 
+  it("PR-03 warns when the spend of the day has no price", () => {
+    const state = budgetState(0, 1, false);
+    expect(state.level).toBe("unknown");
+    expect(state.remainingUsd).toBeNull();
+    expect(state.pricingKnown).toBe(false);
+    expect(budgetMessage(state)).toContain("unknown");
+    expect(budgetMessage(state)).toContain("known price");
+  });
+
+  it("PR-03 does not block a send when the spend has no price", () => {
+    expect(budgetState(5, 1, false).level).not.toBe("blocked");
+    expect(budgetState(0, null, false).level).toBe("off");
+    expect(budgetState(0, null, false).pricingKnown).toBe(false);
+    expect(budgetState(0, 1).level).toBe("ok");
+  });
+
   it("gives a message that names the next step", () => {
     expect(budgetMessage(budgetState(0.82, 1))).toContain("82 percent");
     expect(budgetMessage(budgetState(0.82, 1))).toContain("Settings");

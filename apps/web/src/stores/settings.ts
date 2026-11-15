@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from "react";
+import { normalizeBudgetLimit } from "@keyrig/core";
+import { readStoredDocument, writeStoredDocument } from "@keyrig/shared";
 import { THEME_KEY, type Theme } from "../lib/theme";
 import { browserStorage } from "../lib/storage";
 import { normalizeAutoLockMinutes } from "../lib/autoLock";
@@ -140,30 +142,11 @@ function normalizeInstructionText(value: unknown): string {
   return value.replace(/\r\n/g, "\n").trim();
 }
 
-/** CO-02: a daily limit. A value outside the range means no limit. */
-function normalizeBudgetLimit(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return null;
-  }
-  if (value < 0.01 || value > 1000) {
-    return null;
-  }
-  return Math.round(value * 100) / 100;
-}
-
 /** Read the settings once. A broken record falls back to the theme file. */
 function readSettings(): AppSettings {
-  let parsed: unknown = null;
-  try {
-    const raw = storage.getItem(SETTINGS_STORAGE_KEY);
-    parsed = raw ? JSON.parse(raw) : null;
-  } catch {
-    parsed = null;
-  }
-  const body =
-    parsed !== null && typeof parsed === "object" && (parsed as { schemaVersion?: unknown }).schemaVersion === SETTINGS_SCHEMA_VERSION
-      ? ((parsed as { data?: Partial<AppSettings> }).data ?? null)
-      : null;
+  const body = readStoredDocument(storage, SETTINGS_STORAGE_KEY, SETTINGS_SCHEMA_VERSION, (data) =>
+    data !== null && typeof data === "object" ? (data as Partial<AppSettings>) : null,
+  );
   let fallbackTheme: Theme = "dark";
   try {
     fallbackTheme = storage.getItem(THEME_KEY) === "light" ? "light" : "dark";
@@ -182,10 +165,7 @@ export function getSettings(): AppSettings {
 
 function persist(settings: AppSettings): void {
   try {
-    storage.setItem(
-      SETTINGS_STORAGE_KEY,
-      JSON.stringify({ schemaVersion: SETTINGS_SCHEMA_VERSION, appliedMigrations: [], data: settings }),
-    );
+    writeStoredDocument(storage, SETTINGS_STORAGE_KEY, SETTINGS_SCHEMA_VERSION, settings);
   } catch {
     // A full storage must not stop a settings change.
   }

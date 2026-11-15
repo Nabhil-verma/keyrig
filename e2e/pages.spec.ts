@@ -129,3 +129,65 @@ test("a deleted chat can be undone", async ({ page }) => {
   await expect(page.locator(".ws-undo")).toHaveCount(0);
   await expect(page.locator(".ws-thread-title", { hasText: "Keep me" })).toHaveCount(1);
 });
+
+test("BUG-04 shows the cache-write count of a saved answer", async ({ page }) => {
+  const username = `write${Date.now().toString(36)}`;
+
+  await page.goto("/app");
+  await page.getByLabel("Username").fill(username);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByLabel("Repeat the password").fill(PASSWORD);
+  await page.locator(".auth-submit").click();
+  await expect(page.locator(".status-chip")).toContainText(username);
+
+  // Sign out first: the first chat of the account still has a pending save.
+  await page.getByRole("button", { name: `Sign out of ${username}` }).click();
+  await expect(page.locator(".auth-card")).toBeVisible();
+
+  // The chat record is a device record, so this test can seed it directly.
+  await page.evaluate(
+    ({ key, at }) => {
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          schemaVersion: 1,
+          appliedMigrations: [],
+          data: [
+            {
+              id: "thread_write",
+              title: "Cache write",
+              createdAt: at,
+              updatedAt: at,
+              messages: [
+                { id: "m1", role: "user", content: "Cache write", at },
+                {
+                  id: "m2",
+                  role: "assistant",
+                  content: "Hello from the cache.",
+                  at,
+                  model: "claude-sonnet-4-5",
+                  keyLabel: "work key",
+                  inputTokens: 100,
+                  outputTokens: 42,
+                  cachedTokens: 800,
+                  cacheWriteTokens: 20,
+                  cacheState: "hit",
+                  costUsd: 0.001,
+                  pricingKnown: true,
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    },
+    { key: `keyrig.account.${username}.keyrig.threads.v1`, at: new Date().toISOString() },
+  );
+
+  await page.reload();
+  await signIn(page, username);
+
+  await page.locator(".ws-thread-title", { hasText: "Cache write" }).click();
+  await expect(page.locator(".ws-meta")).toContainText("800 cached");
+  await expect(page.locator(".ws-meta")).toContainText("20 written");
+});

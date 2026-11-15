@@ -49,9 +49,9 @@ describe("CO-02 the week cost adds the stored days of one device", () => {
   it("sums the last seven UTC days and counts a missing day as zero", () => {
     const week = weekCost(
       [
-        { day: "2026-10-28", usd: 1 },
-        { day: "2026-11-02", usd: 0.5 },
-        { day: "2026-11-04", usd: 0.25 },
+        { day: "2026-10-28", usd: 1, pricingKnown: true },
+        { day: "2026-11-02", usd: 0.5, pricingKnown: true },
+        { day: "2026-11-04", usd: 0.25, pricingKnown: true },
       ],
       new Date("2026-11-04T12:00:00.000Z"),
     );
@@ -70,8 +70,20 @@ describe("CO-02 the week cost adds the stored days of one device", () => {
   });
 
   it("does not count a day outside the week", () => {
-    const week = weekCost([{ day: "2026-10-01", usd: 9 }], new Date("2026-11-04T12:00:00.000Z"));
+    const week = weekCost(
+      [{ day: "2026-10-01", usd: 9, pricingKnown: true }],
+      new Date("2026-11-04T12:00:00.000Z"),
+    );
     expect(week.totalUsd).toBe(0);
+  });
+
+  it("PR-03 marks a week that holds an unknown price", () => {
+    const week = weekCost(
+      [{ day: "2026-11-03", usd: 1, pricingKnown: false }],
+      new Date("2026-11-04T12:00:00.000Z"),
+    );
+    expect(week.totalUsd).toBe(1);
+    expect(week.pricingKnown).toBe(false);
   });
 });
 
@@ -92,6 +104,18 @@ describe("UX-01 the dashboard shows the saved arena runs", () => {
     expect(runs[0]?.threadId).toBe("t2");
     expect(runs[0]?.models).toEqual(["gpt-5.4", "claude"]);
     expect(runs[0]?.costUsd).toBeCloseTo(0.05);
+  });
+
+  it("PR-03 marks a run that holds an unknown price", () => {
+    const mixed: StoredThread = {
+      ...thread("t3", "Mixed", "2026-11-04T09:00:00.000Z", [user("hi", "2026-11-04T09:00:00.000Z")]),
+      arena: {
+        ...arena,
+        results: [arena.results[0]!, { ...arena.results[1]!, pricingKnown: false }],
+      },
+    };
+    const runs = arenaRuns([mixed]);
+    expect(runs[0]?.pricingKnown).toBe(false);
   });
 
   it("shows no run when a chat has no arena record", () => {

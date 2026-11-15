@@ -41,7 +41,6 @@ import { useSettings, writeSettings } from "../stores/settings";
 import {
   atMessageCap,
   atThreadCap,
-  MAX_THREADS,
   MAX_THREADS_MESSAGES,
   threadPreview,
 } from "../stores/threads";
@@ -60,17 +59,6 @@ import { useChatTurns } from "./workspace/useChatTurns";
 import { useSpendTracking } from "./workspace/useSpendTracking";
 
 const storage = browserStorage();
-
-/** The last message that matches, so the chat shows its newest facts. */
-function lastWhere<T>(items: readonly T[], test: (item: T) => boolean): T | undefined {
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    const item = items[index];
-    if (item !== undefined && test(item)) {
-      return item;
-    }
-  }
-  return undefined;
-}
 
 export default function App() {
   const settings = useSettings();
@@ -203,7 +191,7 @@ export default function App() {
     activeToolNames.length > 0 && manifest.abilities.tools && manifest.wireFormat === "openai-chat";
 
   /** CO-02: the day budget, the warning and the stop. */
-  const budget = budgetState(spend.spentToday, settings.dailyBudgetUsd);
+  const budget = budgetState(spend.spentToday, settings.dailyBudgetUsd, spend.todayPricingKnown);
   const budgetStop = budget.level === "blocked" && !overBudget;
   const theme = settings.theme === "light" ? "light" : "dark";
 
@@ -223,13 +211,12 @@ export default function App() {
   }, [threads, search]);
 
   const lastTools = useMemo(
-    () => lastWhere(messages, (message) => message.role === "assistant" && message.tools !== undefined)?.tools ?? [],
+    () => messages.findLast((message) => message.role === "assistant" && message.tools !== undefined)?.tools ?? [],
     [messages],
   );
 
   const contextUsed = useMemo(() => {
-    const message = lastWhere(
-      messages,
+    const message = messages.findLast(
       (item) => item.role === "assistant" && item.inputTokens !== undefined,
     );
     return (message?.inputTokens ?? 0) + (message?.outputTokens ?? 0);
@@ -513,6 +500,7 @@ export default function App() {
         view={view}
         onView={setView}
         totalCost={spend.totalCost}
+        pricingKnown={spend.sessionPricingKnown}
         theme={theme}
         canExport={messages.length > 0}
         onExport={exportThread}
@@ -669,6 +657,7 @@ export default function App() {
           priceIn={pricing?.input ?? null}
           priceOut={pricing?.output ?? null}
           spent={budget.spentUsd}
+          spendKnown={spend.todayPricingKnown}
           limit={budget.limitUsd}
           files={files}
           onRemoveFile={(path) => {

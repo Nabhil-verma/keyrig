@@ -56,12 +56,16 @@ export interface ChatRequest {
 
 /**
  * inputTokens is the uncached prompt part. cachedTokens is the cached prompt part.
+ * cacheWriteTokens is the part that keyrig wrote to the cache.
+ * A provider counts each part once, so the prompt total is the sum of the three.
  * This shape is the same for every provider. The adapters normalize the counts.
  */
 export interface Usage {
   inputTokens: number;
   outputTokens: number;
   cachedTokens?: number;
+  /** BUG-04: the tokens that keyrig wrote to the provider cache. */
+  cacheWriteTokens?: number;
   reasoningTokens?: number;
 }
 

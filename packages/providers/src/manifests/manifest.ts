@@ -79,15 +79,48 @@ const METADATA_HOSTS = new Set([
   "fd00:ec2::254",
 ]);
 
-const PRIVATE_V4 =
-  /^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.0\.0\.0$|localhost$)/i;
+function parseIpv4(host: string): [number, number, number, number] | null {
+  const parts = host.split(".");
+  if (parts.length !== 4) {
+    return null;
+  }
+  const octets: number[] = [];
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) {
+      return null;
+    }
+    const value = Number(part);
+    if (value > 255) {
+      return null;
+    }
+    octets.push(value);
+  }
+  const [a = 0, b = 0] = octets;
+  return [a, b, octets[2] ?? 0, octets[3] ?? 0];
+}
 
 function isPrivateHost(host: string): boolean {
   const name = host.toLowerCase().replace(/^\[|\]$/g, "");
   if (name === "localhost" || name.endsWith(".localhost") || name === "::1") {
     return true;
   }
-  return PRIVATE_V4.test(name);
+  if (name.includes(":")) {
+    // IPv6 unique-local (fc00::/7) and link-local (fe80::/10).
+    return /^f[cd][0-9a-f]{2}:/.test(name) || name.startsWith("fe80:");
+  }
+  const address = parseIpv4(name);
+  if (address === null) {
+    return false;
+  }
+  const [a, b] = address;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168)
+  );
 }
 
 export function checkBaseUrl(rawUrl: string, options: { requireHttps?: boolean } = {}): BaseUrlCheck {
@@ -112,7 +145,8 @@ export function checkBaseUrl(rawUrl: string, options: { requireHttps?: boolean }
     };
   }
 
-  if (METADATA_HOSTS.has(url.hostname.toLowerCase())) {
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (METADATA_HOSTS.has(host)) {
     return {
       allowed: false,
       warning: "The base URL points to a cloud metadata address. keyrig blocks this address.",
@@ -120,7 +154,7 @@ export function checkBaseUrl(rawUrl: string, options: { requireHttps?: boolean }
     };
   }
 
-  if (url.protocol === "http:" && !isPrivateHost(url.hostname)) {
+  if (url.protocol === "http:" && !isPrivateHost(host)) {
     return {
       allowed: false,
       warning: "The base URL uses http on a public host. Use https, or use a local address.",
@@ -128,7 +162,7 @@ export function checkBaseUrl(rawUrl: string, options: { requireHttps?: boolean }
     };
   }
 
-  if (isPrivateHost(url.hostname)) {
+  if (isPrivateHost(host)) {
     return {
       allowed: true,
       warning: "The base URL points to a local or private address. Make sure you trust this server.",

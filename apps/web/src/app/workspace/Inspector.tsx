@@ -27,6 +27,8 @@ interface InspectorProps {
   priceIn: number | null;
   priceOut: number | null;
   spent: number;
+  /** PR-03: false when a request of today had no price. */
+  spendKnown: boolean;
   limit: number | null;
   days: SpendDay[];
   requests: UsageEvent[];
@@ -50,6 +52,7 @@ export function Inspector({
   priceIn,
   priceOut,
   spent,
+  spendKnown,
   limit,
   days,
   requests,
@@ -87,6 +90,7 @@ export function Inspector({
             priceIn={priceIn}
             priceOut={priceOut}
             spent={spent}
+            spendKnown={spendKnown}
             limit={limit}
             days={days}
             requests={requests}

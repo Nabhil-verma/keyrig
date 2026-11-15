@@ -1,6 +1,5 @@
 import { bindFetch, redact } from "@keyrig/shared";
-import { checkConnectorUrl } from "../stores/connectors";
-import { normalizeTools, type Connector, type ConnectorTool } from "../stores/connectors";
+import { checkConnectorUrl, normalizeTools, type Connector, type ConnectorTool } from "../stores/connectors";
 
 /**
  * A small MCP client over the Streamable HTTP transport: one JSON-RPC POST per
@@ -17,11 +16,6 @@ const MAX_ARGUMENT_BYTES = 32 * 1024;
 const MAX_RESULT_CHARS = 8_000;
 
 let nextRequestId = 1;
-
-interface RpcError {
-  code?: unknown;
-  message?: unknown;
-}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)

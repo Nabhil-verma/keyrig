@@ -99,7 +99,7 @@ export async function runChat(options: RunChatOptions): Promise<ChatResult> {
 
   const response = await fetchProvider(call, manifest, plan.url, {
     method: "POST",
-    headers: { ...plan.headers, ...(config.headers ?? {}) },
+    headers: { ...plan.headers, ...config.headers },
     body: JSON.stringify(plan.body),
   });
 

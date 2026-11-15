@@ -88,7 +88,7 @@ export async function listModels(options: ModelListOptions): Promise<ModelListRe
   const call = prepareCall(manifest, config, MODEL_LIST_TIMEOUT_MS);
   const response = await fetchProvider(call, manifest, listUrl(manifest, call.baseUrl), {
     method: "GET",
-    headers: { ...listHeaders(manifest, call.apiKey), ...(config.headers ?? {}) },
+    headers: { ...listHeaders(manifest, call.apiKey), ...config.headers },
   });
 
   let payload: unknown;

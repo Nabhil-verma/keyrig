@@ -1,4 +1,4 @@
-import { createDocument, createId, isVersionedDocument, type StorageLike } from "@keyrig/shared";
+import { createId, readStoredDocument, writeStoredDocument, type StorageLike } from "@keyrig/shared";
 
 /**
  * D-07 and Phase 5: the local copy of the feature requests.
@@ -52,39 +52,22 @@ function readRequest(value: unknown): LocalRequest | null {
 }
 
 export function readLocalRequests(storage: StorageLike): LocalRequest[] {
-  let raw: string | null;
-  try {
-    raw = storage.getItem(LOCAL_REQUESTS_STORAGE_KEY);
-  } catch {
-    return [];
-  }
-  if (!raw) {
-    return [];
-  }
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!isVersionedDocument(parsed) || parsed.schemaVersion !== LOCAL_REQUESTS_SCHEMA_VERSION) {
-      return [];
-    }
-    if (!Array.isArray(parsed.data)) {
-      return [];
-    }
-    return (parsed.data as unknown[])
-      .map(readRequest)
-      .filter((item): item is LocalRequest => item !== null)
-      .slice(0, LOCAL_REQUEST_LIMIT);
-  } catch {
-    return [];
-  }
+  return (
+    readStoredDocument(storage, LOCAL_REQUESTS_STORAGE_KEY, LOCAL_REQUESTS_SCHEMA_VERSION, (data) =>
+      Array.isArray(data)
+        ? (data as unknown[])
+            .map(readRequest)
+            .filter((item): item is LocalRequest => item !== null)
+            .slice(0, LOCAL_REQUEST_LIMIT)
+        : null,
+    ) ?? []
+  );
 }
 
 function writeLocalRequests(storage: StorageLike, requests: LocalRequest[]): LocalRequest[] {
   const capped = requests.slice(0, LOCAL_REQUEST_LIMIT);
   try {
-    storage.setItem(
-      LOCAL_REQUESTS_STORAGE_KEY,
-      JSON.stringify(createDocument(LOCAL_REQUESTS_SCHEMA_VERSION, capped)),
-    );
+    writeStoredDocument(storage, LOCAL_REQUESTS_STORAGE_KEY, LOCAL_REQUESTS_SCHEMA_VERSION, capped);
   } catch {
     return capped;
   }

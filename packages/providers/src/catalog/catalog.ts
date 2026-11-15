@@ -1,4 +1,4 @@
-import { bindFetch, createDocument, isVersionedDocument, type StorageLike, type VersionedDocument } from "@keyrig/shared";
+import { bindFetch, readStoredDocument, writeStoredDocument, type StorageLike } from "@keyrig/shared";
 import bundled from "./bundled-catalog.json";
 import type { Pricing, PriceTier } from "./cost";
 
@@ -83,7 +83,13 @@ function parseTiers(raw: unknown): PriceTier[] | undefined {
     if (item === null || typeof item !== "object") {
       continue;
     }
-    const tier = item as { input?: unknown; output?: unknown; cache_read?: unknown; tier?: { size?: unknown } };
+    const tier = item as {
+      input?: unknown;
+      output?: unknown;
+      cache_read?: unknown;
+      cache_write?: unknown;
+      tier?: { size?: unknown };
+    };
     const size = numberOrUndefined(tier.tier?.size);
     const input = numberOrUndefined(tier.input);
     const output = numberOrUndefined(tier.output);
@@ -91,7 +97,14 @@ function parseTiers(raw: unknown): PriceTier[] | undefined {
       continue;
     }
     const cacheRead = numberOrUndefined(tier.cache_read);
-    tiers.push({ minInputTokens: size, input, output, ...(cacheRead !== undefined ? { cacheRead } : {}) });
+    const cacheWrite = numberOrUndefined(tier.cache_write);
+    tiers.push({
+      minInputTokens: size,
+      input,
+      output,
+      ...(cacheRead !== undefined ? { cacheRead } : {}),
+      ...(cacheWrite !== undefined ? { cacheWrite } : {}),
+    });
   }
   return tiers.length > 0 ? tiers : undefined;
 }
@@ -177,23 +190,46 @@ export function bundledCatalog(): Catalog {
   return parseCatalog(bundled, new Date(0));
 }
 
-function readCache(storage: StorageLike | undefined): VersionedDocument<Catalog> | null {
+/** A saved catalog must have the shape that the reader uses. */
+function isCatalog(value: unknown): value is Catalog {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.fetchedAt !== "string" || !Number.isFinite(Date.parse(record.fetchedAt))) {
+    return false;
+  }
+  if (record.providers === null || typeof record.providers !== "object" || Array.isArray(record.providers)) {
+    return false;
+  }
+  return Object.values(record.providers as Record<string, unknown>).every((entry) => {
+    if (entry === null || typeof entry !== "object") {
+      return false;
+    }
+    const provider = entry as Record<string, unknown>;
+    if (typeof provider.id !== "string" || !Array.isArray(provider.envVars)) {
+      return false;
+    }
+    if (provider.models === null || typeof provider.models !== "object" || Array.isArray(provider.models)) {
+      return false;
+    }
+    return Object.values(provider.models as Record<string, unknown>).every((model) => {
+      if (model === null || typeof model !== "object") {
+        return false;
+      }
+      const item = model as Record<string, unknown>;
+      return typeof item.id === "string" && typeof item.name === "string";
+    });
+  });
+}
+
+function readCache(storage: StorageLike | undefined): Catalog | null {
   if (!storage) {
     return null;
   }
-  try {
-    const raw = storage.getItem(CATALOG_CACHE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed: unknown = JSON.parse(raw);
-    if (!isVersionedDocument(parsed) || parsed.schemaVersion !== CATALOG_SCHEMA_VERSION) {
-      return null;
-    }
-    return parsed as VersionedDocument<Catalog>;
-  } catch {
-    return null;
-  }
+  return readStoredDocument(storage, CATALOG_CACHE_KEY, CATALOG_SCHEMA_VERSION, (data) =>
+    isCatalog(data) ? data : null,
+  );
 }
 
 function writeCache(storage: StorageLike | undefined, catalog: Catalog): void {
@@ -201,7 +237,7 @@ function writeCache(storage: StorageLike | undefined, catalog: Catalog): void {
     return;
   }
   try {
-    storage.setItem(CATALOG_CACHE_KEY, JSON.stringify(createDocument(CATALOG_SCHEMA_VERSION, catalog)));
+    writeStoredDocument(storage, CATALOG_CACHE_KEY, CATALOG_SCHEMA_VERSION, catalog);
   } catch {
     // A full storage must not stop a chat. The app runs with the memory catalog.
   }
@@ -217,9 +253,9 @@ export async function loadCatalog(options: LoadCatalogOptions = {}): Promise<Loa
   const cached = readCache(options.storage);
 
   if (cached) {
-    const age = now() - Date.parse(cached.data.fetchedAt);
+    const age = now() - Date.parse(cached.fetchedAt);
     if (Number.isFinite(age) && age >= 0 && age < ttlMs) {
-      return { catalog: cached.data, source: "cache" };
+      return { catalog: cached, source: "cache" };
     }
   }
 
@@ -244,7 +280,7 @@ export async function loadCatalog(options: LoadCatalogOptions = {}): Promise<Loa
     } catch {
       if (cached) {
         return {
-          catalog: cached.data,
+          catalog: cached,
           source: "cache",
           warning: "keyrig uses the saved model catalog. The network is off.",
         };
@@ -258,7 +294,7 @@ export async function loadCatalog(options: LoadCatalogOptions = {}): Promise<Loa
   }
 
   if (cached) {
-    return { catalog: cached.data, source: "cache" };
+    return { catalog: cached, source: "cache" };
   }
   return { catalog: bundledCatalog(), source: "bundled" };
 }

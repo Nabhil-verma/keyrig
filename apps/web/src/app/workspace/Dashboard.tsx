@@ -337,7 +337,7 @@ export function Dashboard({
                   <em>{run.models.join(" · ")}</em>
                 </span>
                 <span className="dash-row-meta">
-                  {formatUsd(run.costUsd)}
+                  {formatUsd(run.costUsd, run.pricingKnown)}
                   <small>{timeAgo(run.at)}</small>
                 </span>
               </li>
@@ -382,8 +382,10 @@ export function Dashboard({
           empty=""
         >
           <div className="dash-cost">
-            <strong className="dash-cost-total">{formatUsd(week.totalUsd)}</strong>
-            <span className="dash-cost-note">estimated</span>
+            <strong className="dash-cost-total">{formatUsd(week.totalUsd, week.pricingKnown)}</strong>
+            <span className="dash-cost-note">
+              {week.pricingKnown ? "estimated" : "some costs unknown"}
+            </span>
           </div>
           <ol className="dash-bars" aria-label="Cost by day">
             {week.days.map((day) => (
@@ -391,7 +393,7 @@ export function Dashboard({
                 <span
                   className="dash-bar"
                   style={{ height: `${Math.max(4, Math.round((day.usd / weekMax) * 100))}%` }}
-                  title={`${day.day}: ${formatUsd(day.usd)}`}
+                  title={`${day.day}: ${formatUsd(day.usd, day.pricingKnown)}`}
                 />
                 <small>{day.day.slice(8)}</small>
               </li>

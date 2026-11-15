@@ -9,16 +9,29 @@ import {
 } from "@keyrig/core";
 import { formatUsd } from "@keyrig/providers";
 import { browserStorage } from "../../lib/storage";
-import { readSpend } from "../../stores/spendStore";
+import { readSpend, readSpendKnown } from "../../stores/spendStore";
 import { useSettings, writeSettings } from "../../stores/settings";
 import { Section } from "./Section";
 
 export function GuardrailsSection() {
   const settings = useSettings();
-  const state = budgetState(readSpend(browserStorage()), settings.dailyBudgetUsd);
+  const spendKnown = readSpendKnown(browserStorage());
+  const state = budgetState(readSpend(browserStorage()), settings.dailyBudgetUsd, spendKnown);
   const [limit, setLimit] = useState(
     settings.dailyBudgetUsd === null ? "" : String(settings.dailyBudgetUsd),
   );
+
+  /** PR-03: one note states the spend and the budget state. */
+  const note = ((): string => {
+    /** The budget message already names the unknown cost, so it stands alone. */
+    const spendText = spendKnown
+      ? `${formatUsd(state.spentUsd)} is spent on this device.`
+      : state.limitUsd === null
+        ? "The cost today is unknown."
+        : null;
+    const limitText = budgetMessage(state) ?? (state.limitUsd === null ? "No limit is set." : null);
+    return [spendText, limitText].filter((part) => part !== null).join(" ");
+  })();
 
   const commitLimit = (raw: string): void => {
     setLimit(raw);
@@ -69,8 +82,7 @@ export function GuardrailsSection() {
       </div>
 
       <div className="settings-note">
-        <strong>Today.</strong> {formatUsd(state.spentUsd)} is spent on this device.{" "}
-        {budgetMessage(state) ?? "No limit is set."}
+        <strong>Today.</strong> {note}
       </div>
     </Section>
   );

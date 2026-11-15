@@ -55,7 +55,14 @@ export interface ChatOutcome {
 }
 
 function isEmptyReply(result: ChatResult): boolean {
-  return result.text.trim().length === 0 && !result.aborted && result.stopReason === "complete";
+  // BUG-02: a reply that asks for a tool is a complete reply, not an empty one.
+  // A retry would run the tool again.
+  return (
+    result.text.trim().length === 0 &&
+    (result.toolCalls?.length ?? 0) === 0 &&
+    !result.aborted &&
+    result.stopReason === "complete"
+  );
 }
 
 export async function sendChat(options: SendChatOptions): Promise<ChatOutcome> {
@@ -157,6 +164,9 @@ export async function sendChat(options: SendChatOptions): Promise<ChatOutcome> {
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     ...(result.usage.cachedTokens !== undefined ? { cachedTokens: result.usage.cachedTokens } : {}),
+    ...(result.usage.cacheWriteTokens !== undefined
+      ? { cacheWriteTokens: result.usage.cacheWriteTokens }
+      : {}),
     costUsd: cost.usd,
     pricingKnown: cost.pricingKnown,
     stopReason: result.stopReason,

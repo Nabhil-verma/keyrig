@@ -1,5 +1,5 @@
 import { normalizeRecoveryEmail } from "@keyrig/core";
-import { createDocument, isVersionedDocument, type StorageLike } from "@keyrig/shared";
+import { readStoredDocument, writeStoredDocument, type StorageLike } from "@keyrig/shared";
 
 /**
  * The profile of one account on this device.
@@ -63,34 +63,17 @@ export function normalizeConnections(input: unknown): AccountConnections {
 }
 
 export function readConnections(storage: StorageLike): AccountConnections {
-  let raw: string | null;
-  try {
-    raw = storage.getItem(CONNECTIONS_STORAGE_KEY);
-  } catch {
-    return { ...DEFAULT_CONNECTIONS };
-  }
-  if (!raw) {
-    return { ...DEFAULT_CONNECTIONS };
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { ...DEFAULT_CONNECTIONS };
-  }
-  if (!isVersionedDocument(parsed) || parsed.schemaVersion !== CONNECTIONS_SCHEMA_VERSION) {
-    return { ...DEFAULT_CONNECTIONS };
-  }
-  return normalizeConnections(parsed.data);
+  return (
+    readStoredDocument(storage, CONNECTIONS_STORAGE_KEY, CONNECTIONS_SCHEMA_VERSION, normalizeConnections) ?? {
+      ...DEFAULT_CONNECTIONS,
+    }
+  );
 }
 
 export function writeConnections(storage: StorageLike, patch: Partial<AccountConnections>): AccountConnections {
   const next = normalizeConnections({ ...readConnections(storage), ...patch });
   try {
-    storage.setItem(
-      CONNECTIONS_STORAGE_KEY,
-      JSON.stringify(createDocument(CONNECTIONS_SCHEMA_VERSION, next)),
-    );
+    writeStoredDocument(storage, CONNECTIONS_STORAGE_KEY, CONNECTIONS_SCHEMA_VERSION, next);
   } catch {
     // A full storage must not stop the profile form.
   }

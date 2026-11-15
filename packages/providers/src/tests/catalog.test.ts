@@ -41,6 +41,26 @@ describe("PV-01 catalog parsing", () => {
     expect(model?.pricing?.tiers?.[0]?.minInputTokens).toBe(272000);
   });
 
+  it("BUG-04 reads a cache-write price on a price tier", () => {
+    const catalog = parseCatalog({
+      p: {
+        name: "P",
+        models: {
+          m: {
+            id: "m",
+            name: "M",
+            cost: {
+              input: 1,
+              output: 2,
+              tiers: [{ input: 3, output: 4, cache_write: 5, tier: { size: 10 } }],
+            },
+          },
+        },
+      },
+    });
+    expect(catalog.providers.p?.models.m?.pricing?.tiers?.[0]?.cacheWrite).toBe(5);
+  });
+
   it("skips a provider entry that is not an object", () => {
     const catalog = parseCatalog({ ok: { name: "Ok", models: {} }, bad: 3 });
     expect(Object.keys(catalog.providers)).toEqual(["ok"]);
@@ -128,5 +148,31 @@ describe("PV-01 catalog cache and offline start", () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify(payload), { status: 200 })) as unknown as typeof fetch;
     const result = await loadCatalog({ storage, fetchImpl });
     expect(result.source).toBe("network");
+  });
+
+  it("ignores a cached catalog with no data", async () => {
+    const storage = createMemoryStorage({
+      [CATALOG_CACHE_KEY]: JSON.stringify({ schemaVersion: 1, appliedMigrations: [], data: null }),
+    });
+    const offline = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    }) as unknown as typeof fetch;
+    const result = await loadCatalog({ storage, fetchImpl: offline });
+    expect(result.source).toBe("bundled");
+  });
+
+  it("ignores a cached catalog with a bad provider", async () => {
+    const storage = createMemoryStorage({
+      [CATALOG_CACHE_KEY]: JSON.stringify({
+        schemaVersion: 1,
+        appliedMigrations: [],
+        data: { fetchedAt: "2026-01-01T00:00:00.000Z", providers: { openai: null } },
+      }),
+    });
+    const offline = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    }) as unknown as typeof fetch;
+    const result = await loadCatalog({ storage, fetchImpl: offline });
+    expect(result.source).toBe("bundled");
   });
 });

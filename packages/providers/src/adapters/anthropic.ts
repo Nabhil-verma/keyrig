@@ -37,8 +37,9 @@ export async function readAnthropicStream(
     const cacheWrite = usage?.cache_creation_input_tokens ?? 0;
     state.usage = {
       ...state.usage,
-      inputTokens: input + cacheWrite,
+      inputTokens: input,
       ...(cacheRead > 0 ? { cachedTokens: cacheRead } : {}),
+      ...(cacheWrite > 0 ? { cacheWriteTokens: cacheWrite } : {}),
     };
   };
 

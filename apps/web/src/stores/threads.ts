@@ -1,5 +1,5 @@
 import type { AgentEvent, KeyrigScene } from "@keyrig/core";
-import { createDocument, createId, isVersionedDocument, type StorageLike } from "@keyrig/shared";
+import { createId, readStoredDocument, writeStoredDocument, type StorageLike } from "@keyrig/shared";
 import type { ArenaResult, ArenaRun, UIMessage } from "../lib/types";
 
 /**
@@ -111,6 +111,14 @@ function readArenaResult(value: unknown): ArenaResult | null {
     inputTokens: numberOrNull(value.inputTokens) ?? 0,
     outputTokens: numberOrNull(value.outputTokens) ?? 0,
   };
+  const cachedTokens = numberOrNull(value.cachedTokens);
+  if (cachedTokens !== null) {
+    result.cachedTokens = cachedTokens;
+  }
+  const cacheWriteTokens = numberOrNull(value.cacheWriteTokens);
+  if (cacheWriteTokens !== null) {
+    result.cacheWriteTokens = cacheWriteTokens;
+  }
   if (isPlainObject(value.error)) {
     result.error = value.error as unknown as NonNullable<ArenaResult["error"]>;
   }
@@ -182,12 +190,20 @@ function readMessage(value: unknown): UIMessage | null {
   if (cachedTokens !== null) {
     message.cachedTokens = cachedTokens;
   }
+  const cacheWriteTokens = numberOrNull(value.cacheWriteTokens);
+  if (cacheWriteTokens !== null) {
+    message.cacheWriteTokens = cacheWriteTokens;
+  }
   if (value.cacheState === "hit" || value.cacheState === "none") {
     message.cacheState = value.cacheState;
   }
   const stopReason = stringOrNull(value.stopReason);
   if (stopReason !== null) {
     message.stopReason = stopReason;
+  }
+  // BUG-03: an old record has no mode. The retry reads it as a chat turn.
+  if (value.mode === "chat" || value.mode === "tools") {
+    message.mode = value.mode;
   }
   if (isPlainObject(value.error)) {
     message.error = value.error as unknown as NonNullable<UIMessage["error"]>;
@@ -253,31 +269,17 @@ export function orderThreads(threads: readonly StoredThread[]): StoredThread[] {
 }
 
 export function readThreads(storage: StorageLike): StoredThread[] {
-  let raw: string | null;
-  try {
-    raw = storage.getItem(THREADS_STORAGE_KEY);
-  } catch {
-    return [];
-  }
-  if (!raw) {
-    return [];
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return [];
-  }
-  if (!isVersionedDocument(parsed) || parsed.schemaVersion !== THREADS_SCHEMA_VERSION) {
-    return [];
-  }
-  if (!Array.isArray(parsed.data)) {
-    return [];
-  }
-  return orderThreads(
-    (parsed.data as unknown[])
-      .map(normalizeThread)
-      .filter((thread): thread is StoredThread => thread !== null),
+  return (
+    readStoredDocument(storage, THREADS_STORAGE_KEY, THREADS_SCHEMA_VERSION, (data) => {
+      if (!Array.isArray(data)) {
+        return null;
+      }
+      return orderThreads(
+        (data as unknown[])
+          .map(normalizeThread)
+          .filter((thread): thread is StoredThread => thread !== null),
+      );
+    }) ?? []
   );
 }
 
@@ -288,7 +290,7 @@ export function writeThreads(storage: StorageLike, threads: readonly StoredThrea
     messages: thread.messages.slice(-MAX_THREADS_MESSAGES),
   }));
   try {
-    storage.setItem(THREADS_STORAGE_KEY, JSON.stringify(createDocument(THREADS_SCHEMA_VERSION, capped)));
+    writeStoredDocument(storage, THREADS_STORAGE_KEY, THREADS_SCHEMA_VERSION, capped);
   } catch {
     // A full storage must not stop a chat.
   }

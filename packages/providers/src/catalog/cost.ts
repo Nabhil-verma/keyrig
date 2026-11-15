@@ -7,6 +7,8 @@ export interface PriceTier {
   input: number;
   output: number;
   cacheRead?: number;
+  /** NEW-02: the price of one token that keyrig writes to the cache. */
+  cacheWrite?: number;
 }
 
 export interface Pricing {
@@ -23,11 +25,12 @@ export interface CostEstimate {
   pricingKnown: boolean;
   /** CO-01: the app always marks a cost as estimated. */
   estimated: true;
-  breakdown: { inputUsd: number; cachedUsd: number; outputUsd: number };
+  breakdown: { inputUsd: number; cachedUsd: number; cacheWriteUsd: number; outputUsd: number };
 }
 
 const MILLION = 1_000_000;
 
+/** The tier size is the prompt count, so pass input, cached and written tokens. */
 export function selectPrice(pricing: Pricing, inputTokens: number): Omit<PriceTier, "minInputTokens"> {
   const tiers = [...(pricing.tiers ?? [])].sort((a, b) => a.minInputTokens - b.minInputTokens);
   let tier: PriceTier | undefined;
@@ -38,8 +41,14 @@ export function selectPrice(pricing: Pricing, inputTokens: number): Omit<PriceTi
   }
   const input = tier?.input ?? pricing.input;
   const output = tier?.output ?? pricing.output;
-  const cacheRead = tier ? tier.cacheRead : pricing.cacheRead;
-  return { input, output, ...(cacheRead !== undefined ? { cacheRead } : {}) };
+  const cacheRead = tier?.cacheRead ?? pricing.cacheRead;
+  const cacheWrite = tier?.cacheWrite ?? pricing.cacheWrite;
+  return {
+    input,
+    output,
+    ...(cacheRead !== undefined ? { cacheRead } : {}),
+    ...(cacheWrite !== undefined ? { cacheWrite } : {}),
+  };
 }
 
 export function estimateCost(usage: Usage, pricing: Pricing | undefined): CostEstimate {
@@ -48,21 +57,23 @@ export function estimateCost(usage: Usage, pricing: Pricing | undefined): CostEs
       usd: 0,
       pricingKnown: false,
       estimated: true,
-      breakdown: { inputUsd: 0, cachedUsd: 0, outputUsd: 0 },
+      breakdown: { inputUsd: 0, cachedUsd: 0, cacheWriteUsd: 0, outputUsd: 0 },
     };
   }
 
-  const price = selectPrice(pricing, usage.inputTokens);
   const cached = usage.cachedTokens ?? 0;
+  const written = usage.cacheWriteTokens ?? 0;
+  const price = selectPrice(pricing, usage.inputTokens + cached + written);
   const inputUsd = (usage.inputTokens / MILLION) * price.input;
   const cachedUsd = (cached / MILLION) * (price.cacheRead ?? price.input);
+  const cacheWriteUsd = (written / MILLION) * (price.cacheWrite ?? price.input);
   const outputUsd = (usage.outputTokens / MILLION) * price.output;
 
   return {
-    usd: inputUsd + cachedUsd + outputUsd,
+    usd: inputUsd + cachedUsd + cacheWriteUsd + outputUsd,
     pricingKnown: true,
     estimated: true,
-    breakdown: { inputUsd, cachedUsd, outputUsd },
+    breakdown: { inputUsd, cachedUsd, cacheWriteUsd, outputUsd },
   };
 }
 

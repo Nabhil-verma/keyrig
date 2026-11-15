@@ -52,6 +52,12 @@ function messageMeta(message: UIMessage): string[] {
   if (message.inputTokens !== undefined) {
     meta.push(`${message.inputTokens.toLocaleString()} in / ${(message.outputTokens ?? 0).toLocaleString()} out`);
   }
+  if (message.cachedTokens !== undefined && message.cachedTokens > 0) {
+    meta.push(`${message.cachedTokens.toLocaleString()} cached`);
+  }
+  if (message.cacheWriteTokens !== undefined && message.cacheWriteTokens > 0) {
+    meta.push(`${message.cacheWriteTokens.toLocaleString()} written`);
+  }
   if (message.costUsd !== undefined) {
     meta.push(message.pricingKnown === false ? "cost unknown" : `${formatUsd(message.costUsd, true)} estimated`);
   }

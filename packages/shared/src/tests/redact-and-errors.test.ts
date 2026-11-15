@@ -140,6 +140,20 @@ describe("KS-03 one redaction function", () => {
     expect(JSON.stringify(safe)).not.toContain(OPENAI_KEY);
   });
 
+  it("masks a shared object on every path", () => {
+    const shared = { note: OPENAI_KEY };
+    const safe = redactDeep({ first: shared, second: shared }) as {
+      first: { note: string };
+      second: { note: string };
+    };
+    expect(safe.first.note).toBe("[redacted]");
+    expect(safe.second.note).toBe("[redacted]");
+  });
+
+  it("masks a bearer token in any case", () => {
+    expect(redact("bearer abc.def.ghi123456789")).toBe("bearer [redacted]");
+  });
+
   it("does not change normal text", () => {
     expect(redact("The model answered in 2.4 seconds.")).toBe("The model answered in 2.4 seconds.");
   });

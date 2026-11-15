@@ -4,7 +4,7 @@
   try {
     var stored = window.localStorage.getItem("keyrig.theme");
     document.documentElement.dataset.theme = stored === "light" ? "light" : "dark";
-  } catch (error) {
+  } catch {
     document.documentElement.dataset.theme = "dark";
   }
 })();

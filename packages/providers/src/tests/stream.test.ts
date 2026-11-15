@@ -65,7 +65,7 @@ describe("PV-08 recorded streams", () => {
     expect(result.providerId).toBe("openai");
   });
 
-  it("reads an Anthropic stream with cache usage", async () => {
+  it("BUG-04 reads an Anthropic stream and keeps the cache writes apart from the input", async () => {
     const result = await runChat({
       manifest: anthropic,
       config: { apiKey: "sk-ant-test", fetchImpl: fetchFromFixture(fixture(anthropicFixture)) },
@@ -73,7 +73,7 @@ describe("PV-08 recorded streams", () => {
     });
     expect(result.text).toBe("Hello from Anthropic.");
     expect(result.finishReason).toBe("end_turn");
-    expect(result.usage).toEqual({ inputTokens: 120, outputTokens: 42, cachedTokens: 800 });
+    expect(result.usage).toEqual({ inputTokens: 100, outputTokens: 42, cachedTokens: 800, cacheWriteTokens: 20 });
     expect(result.stopReason).toBe("complete");
     expect(result.requestId).toBe("msg_test_1");
   });

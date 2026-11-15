@@ -34,6 +34,59 @@ describe("CO-01 estimated cost", () => {
     expect(cost.usd).toBeCloseTo(0.3, 6);
   });
 
+  it("NEW-02 prices cache-write tokens with the cache-write price", () => {
+    const cost = estimateCost(
+      { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 1_000_000 },
+      { input: 3, output: 15, cacheWrite: 3.75 },
+    );
+    expect(cost.usd).toBeCloseTo(3.75, 6);
+    expect(cost.breakdown.cacheWriteUsd).toBeCloseTo(3.75, 6);
+    expect(cost.breakdown.cachedUsd).toBe(0);
+  });
+
+  it("NEW-02 uses the input price for a write when the catalog has no write price", () => {
+    const cost = estimateCost(
+      { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 1_000_000 },
+      { input: 3, output: 15 },
+    );
+    expect(cost.usd).toBeCloseTo(3, 6);
+    expect(cost.breakdown.cacheWriteUsd).toBeCloseTo(3, 6);
+  });
+
+  it("BUG-04 selects the cache-write price of the tier", () => {
+    const pricing = {
+      input: 3,
+      output: 15,
+      cacheWrite: 3.75,
+      tiers: [{ minInputTokens: 200000, input: 6, output: 22.5, cacheWrite: 7.5 }],
+    };
+    expect(selectPrice(pricing, 1000).cacheWrite).toBe(3.75);
+    expect(selectPrice(pricing, 200001).cacheWrite).toBe(7.5);
+  });
+
+  it("BUG-04 counts the cached and written tokens for the tier", () => {
+    const pricing = {
+      input: 3,
+      output: 15,
+      tiers: [{ minInputTokens: 200000, input: 6, output: 22.5 }],
+    };
+    const cost = estimateCost(
+      { inputTokens: 150000, outputTokens: 0, cachedTokens: 100000 },
+      pricing,
+    );
+    expect(cost.usd).toBeCloseTo((250000 / 1_000_000) * 6, 6);
+  });
+
+  it("NEW-02 keeps the model cache-read price on a tier that has none", () => {
+    const pricing = {
+      input: 3,
+      output: 15,
+      cacheRead: 0.3,
+      tiers: [{ minInputTokens: 100, input: 6, output: 22.5 }],
+    };
+    expect(selectPrice(pricing, 200).cacheRead).toBe(0.3);
+  });
+
   it("uses a higher tier above the tier size", () => {
     const pricing = {
       input: 2.5,

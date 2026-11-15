@@ -16,6 +16,7 @@ import {
   writeThreads,
 } from "./threads";
 import type { UIMessage } from "../lib/types";
+import { retryMode } from "../lib/turnRetry";
 
 function message(id: string, role: "user" | "assistant", content: string): UIMessage {
   return { id, role, content, at: "2026-11-01T00:00:00.000Z" };
@@ -131,6 +132,68 @@ describe("the saved chats", () => {
     });
     expect(cleaned?.messages[0]?.tools).toHaveLength(MAX_STORED_TOOLS);
     expect(cleaned?.messages[0]?.scene?.kind).toBe("keyrig.scene");
+  });
+
+  it("BUG-03 reads an old message with no mode and retries it as a chat turn", () => {
+    const cleaned = normalizeThread({
+      id: "t",
+      createdAt: "2026-11-01T00:00:00.000Z",
+      updatedAt: "2026-11-01T00:00:00.000Z",
+      messages: [{ id: "m", role: "assistant", content: "hi", at: "2026-11-01T00:00:00.000Z" }],
+    });
+    expect(cleaned?.messages[0]?.mode).toBeUndefined();
+    expect(retryMode(cleaned?.messages[0] ?? {})).toBe("chat");
+  });
+
+  it("BUG-03 keeps the mode of a saved tool turn", () => {
+    const cleaned = normalizeThread({
+      id: "t",
+      createdAt: "2026-11-01T00:00:00.000Z",
+      updatedAt: "2026-11-01T00:00:00.000Z",
+      messages: [
+        { id: "m", role: "assistant", content: "hi", at: "2026-11-01T00:00:00.000Z", mode: "tools" },
+      ],
+    });
+    expect(cleaned?.messages[0]?.mode).toBe("tools");
+  });
+
+  it("BUG-04 keeps the cache-write count of a saved answer", () => {
+    const cleaned = normalizeThread({
+      id: "t",
+      createdAt: "2026-11-01T00:00:00.000Z",
+      updatedAt: "2026-11-01T00:00:00.000Z",
+      messages: [{ ...message("m", "assistant", "hi"), cacheWriteTokens: 20 }],
+    });
+    expect(cleaned?.messages[0]?.cacheWriteTokens).toBe(20);
+  });
+
+  it("BUG-04 keeps the cache counts of a saved arena result", () => {
+    const storage = createMemoryStorage();
+    const at = "2026-11-01T00:00:00.000Z";
+    const saved = {
+      ...thread("t", at, [message("m1", "user", "compare")]),
+      arena: {
+        prompt: "compare",
+        at,
+        results: [
+          {
+            model: "gpt-5.4",
+            text: "Hi",
+            durationMs: 5,
+            costUsd: 0.001,
+            pricingKnown: true,
+            inputTokens: 100,
+            outputTokens: 30,
+            cachedTokens: 40,
+            cacheWriteTokens: 10,
+          },
+        ],
+      },
+    };
+    writeThreads(storage, [saved]);
+    const read = readThreads(storage);
+    expect(read[0]?.arena?.results[0]?.cachedTokens).toBe(40);
+    expect(read[0]?.arena?.results[0]?.cacheWriteTokens).toBe(10);
   });
 
   it("saves and reads a thread", () => {

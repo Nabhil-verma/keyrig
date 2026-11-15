@@ -46,6 +46,8 @@ interface ToolTurnOutcome {
   text: string;
   events: AgentEvent[];
   hitLimit: boolean;
+  /** PV-08: the user stopped the turn. The text that arrived is kept. */
+  aborted: boolean;
 }
 
 function readyGithub(github: GithubState): boolean {
@@ -173,5 +175,10 @@ export async function runToolTurn(options: ToolTurnOptions): Promise<ToolTurnOut
     onEvent: options.onEvent,
   });
 
-  return { text: outcome.text, events: outcome.events, hitLimit: outcome.hitLimit };
+  return {
+    text: outcome.text,
+    events: outcome.events,
+    hitLimit: outcome.hitLimit,
+    aborted: outcome.aborted,
+  };
 }

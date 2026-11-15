@@ -122,4 +122,31 @@ describe("KS-07 custom base URL checks", () => {
     expect(checkBaseUrl("/api/ai/v1")).toMatchObject({ allowed: true, warning: null });
     expect(checkBaseUrl("//evil.example/v1").allowed).toBe(false);
   });
+
+  it("does not treat a public host with a private prefix as private", () => {
+    for (const host of ["10.evil.com", "127.evil.com", "192.168.evil.com", "172.16.evil.com"]) {
+      const check = checkBaseUrl(`http://${host}/v1`);
+      expect(check.allowed, host).toBe(false);
+      expect(check.reason, host).toBe("insecure-remote");
+    }
+  });
+
+  it("allows https on a public lookalike with no warning", () => {
+    expect(checkBaseUrl("https://10.evil.com/v1")).toMatchObject({ allowed: true, warning: null });
+  });
+
+  it("warns for the private IPv4 and IPv6 ranges", () => {
+    for (const url of [
+      "http://10.0.0.5",
+      "http://172.16.0.1",
+      "http://192.168.1.1",
+      "http://169.254.10.1",
+      "http://[fd00::1]",
+      "http://[fe80::1]",
+    ]) {
+      const check = checkBaseUrl(url);
+      expect(check.allowed, url).toBe(true);
+      expect(check.warning, url).toMatch(/private address/);
+    }
+  });
 });

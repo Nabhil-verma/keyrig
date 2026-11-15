@@ -80,6 +80,8 @@ export interface AgentOutcome {
   events: AgentEvent[];
   steps: number;
   hitLimit: boolean;
+  /** PV-08: the user stopped the turn. The text that arrived is kept. */
+  aborted: boolean;
 }
 
 function resultText(value: ToolExecution): string {
@@ -113,8 +115,9 @@ export async function runAgentTurn(options: AgentOptions): Promise<AgentOutcome>
   const stopped = (): boolean => options.signal?.aborted === true;
 
   for (let step = 0; step < maxSteps; step += 1) {
+    // PV-08: a stop ends the turn with the text that already arrived.
     if (stopped()) {
-      throw KeyrigError.fromCategory("cancelled");
+      return { text: finalText, events, steps, hitLimit: false, aborted: true };
     }
     steps = step + 1;
     const reply = await options.callModel(history, tools);
@@ -123,14 +126,14 @@ export async function runAgentTurn(options: AgentOptions): Promise<AgentOutcome>
     }
     const calls = reply.toolCalls;
     if (calls.length === 0) {
-      return { text: reply.text, events, steps, hitLimit: false };
+      return { text: reply.text, events, steps, hitLimit: false, aborted: false };
     }
 
     history.push({ role: "assistant", content: reply.text, toolCalls: calls });
 
     for (const call of calls) {
       if (stopped()) {
-        throw KeyrigError.fromCategory("cancelled");
+        return { text: finalText, events, steps, hitLimit: false, aborted: true };
       }
       const startedAt = new Date(now()).toISOString();
       const started = now();
@@ -208,7 +211,7 @@ export async function runAgentTurn(options: AgentOptions): Promise<AgentOutcome>
     }
   }
 
-  return { text: finalText, events, steps, hitLimit: true };
+  return { text: finalText, events, steps, hitLimit: true, aborted: false };
 }
 
 function toMessage(caught: unknown): string {

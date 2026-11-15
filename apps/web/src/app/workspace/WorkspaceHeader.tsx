@@ -10,6 +10,8 @@ interface WorkspaceHeaderProps {
   onView: (view: WorkspaceView) => void;
   /** The cost of this session only. */
   totalCost: number;
+  /** PR-03: false when this session holds a call with no price. */
+  pricingKnown: boolean;
   theme: "dark" | "light";
   canExport: boolean;
   onExport: () => void;
@@ -24,6 +26,7 @@ export function WorkspaceHeader({
   view,
   onView,
   totalCost,
+  pricingKnown,
   theme,
   canExport,
   onExport,
@@ -76,7 +79,7 @@ export function WorkspaceHeader({
           {username}
         </span>
         <span className="chip mono" title="The cost of this session">
-          {formatUsd(totalCost)}
+          {formatUsd(totalCost, pricingKnown)}
         </span>
         <button
           type="button"

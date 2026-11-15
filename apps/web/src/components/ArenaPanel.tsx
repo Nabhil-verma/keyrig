@@ -209,6 +209,12 @@ export function ArenaPanel({ models, canRun, blockReason, onRun, onPick, saved =
                       <span className="chip">
                         {result.inputTokens} in / {result.outputTokens} out
                       </span>
+                      {result.cachedTokens !== undefined && result.cachedTokens > 0 ? (
+                        <span className="chip">{result.cachedTokens} cached</span>
+                      ) : null}
+                      {result.cacheWriteTokens !== undefined && result.cacheWriteTokens > 0 ? (
+                        <span className="chip">{result.cacheWriteTokens} written</span>
+                      ) : null}
                     </footer>
                     <button
                       type="button"

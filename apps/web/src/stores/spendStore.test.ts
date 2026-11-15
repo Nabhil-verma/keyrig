@@ -1,6 +1,6 @@
 import { createDocument, createMemoryStorage } from "@keyrig/shared";
 import { describe, expect, it } from "vitest";
-import { addSpend, readSpend, readSpendHistory, utcDay } from "./spendStore";
+import { addSpend, readSpend, readSpendHistory, readSpendKnown, utcDay } from "./spendStore";
 
 describe("the daily spend record (CO-02)", () => {
   it("adds the costs of the day", () => {
@@ -46,6 +46,37 @@ describe("the daily spend record (CO-02)", () => {
     addSpend(storage, 3, "2026-11-01");
     expect(readSpendHistory(storage, 7, "2026-11-01")).toHaveLength(7);
     expect(readSpendHistory(storage, 7, "2026-11-01").at(-2)?.usd).toBe(0);
+  });
+
+  it("PR-03 marks a day that holds an unknown price", () => {
+    const storage = createMemoryStorage();
+    addSpend(storage, 0.5, "2026-11-01", false);
+    expect(readSpend(storage, "2026-11-01")).toBe(0.5);
+    expect(readSpendKnown(storage, "2026-11-01")).toBe(false);
+  });
+
+  it("PR-03 keeps the unknown mark after a known cost", () => {
+    const storage = createMemoryStorage();
+    addSpend(storage, 0.5, "2026-11-01", false);
+    addSpend(storage, 1, "2026-11-01", true);
+    expect(readSpend(storage, "2026-11-01")).toBe(1.5);
+    expect(readSpendKnown(storage, "2026-11-01")).toBe(false);
+  });
+
+  it("PR-03 reads a v2 day as known", () => {
+    const storage = createMemoryStorage({
+      "keyrig.spend.v1": JSON.stringify(
+        createDocument(2, { days: [{ day: "2026-11-01", usd: 2 }] }),
+      ),
+    });
+    expect(readSpendKnown(storage, "2026-11-01")).toBe(true);
+    expect(addSpend(storage, 1, "2026-11-01")).toBe(3);
+  });
+
+  it("PR-03 keeps the price state in the history", () => {
+    const storage = createMemoryStorage();
+    addSpend(storage, 1, "2026-11-01", false);
+    expect(readSpendHistory(storage, 1, "2026-11-01")[0]?.pricingKnown).toBe(false);
   });
 
   it("reads a v1 one-day record", () => {

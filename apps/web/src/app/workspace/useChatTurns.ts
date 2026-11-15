@@ -14,11 +14,18 @@ import { expandContext } from "../../lib/composerTokens";
 import { createDeltaBuffer, type DeltaBuffer } from "../../lib/deltaBuffer";
 import { trimExchanges } from "../../lib/trimMessages";
 import { newId, type ArenaResult, type UIMessage } from "../../lib/types";
+import { createToolRunTracker, retryMode } from "../../lib/turnRetry";
 import { runToolTurn } from "../../services/agentRun";
 import type { AccountConnections } from "../../stores/connections";
 import { activeTools, type AgentSettings } from "../../stores/toolSettings";
 import type { Workspace, WorkspaceFile } from "../../stores/workspace";
-import { safeError, toChatMessages, withOtherKeyAction } from "./chatTurnHelpers";
+import {
+  isCancelled,
+  keyViewsAfterTurn,
+  safeError,
+  toChatMessages,
+  withOtherKeyAction,
+} from "./chatTurnHelpers";
 
 /** ER-04: the device knows that it is offline. The card stays until the network is back. */
 const OFFLINE_ERROR: KeyrigErrorJSON = {
@@ -193,12 +200,19 @@ export function useChatTurns(options: UseChatTurnsOptions) {
           ...(outcome.result.usage.cachedTokens !== undefined
             ? { cachedTokens: outcome.result.usage.cachedTokens }
             : {}),
+          ...(outcome.result.usage.cacheWriteTokens !== undefined
+            ? { cacheWriteTokens: outcome.result.usage.cacheWriteTokens }
+            : {}),
           cacheState: outcome.cacheState,
           stopReason: outcome.result.stopReason,
         }));
       } catch (caught) {
         // Keep the text that arrived before the failure (PV-08).
         buffer.flush();
+        if (isCancelled(caught)) {
+          patchMessage(setMessages, assistantId, (message) => ({ ...message, stopReason: "aborted" }));
+          return;
+        }
         const tried = triedKeys.current.get(assistantId) ?? new Set<string>();
         if (key !== undefined) {
           tried.add(key.id);
@@ -211,7 +225,10 @@ export function useChatTurns(options: UseChatTurnsOptions) {
         setStreaming(false);
         abortRef.current = null;
         // KS-05: the vault writes the last-used date. Read it back for the key card.
-        setKeys(session.vault.listKeys());
+        const nextKeys = keyViewsAfterTurn(session?.vault ?? null);
+        if (nextKeys !== null) {
+          setKeys(nextKeys);
+        }
       }
     },
     [
@@ -235,20 +252,23 @@ export function useChatTurns(options: UseChatTurnsOptions) {
 
   /** AS-01: a turn that can call a tool. The loop lives in the core. */
   const runToolAssistant = useCallback(
-    async (assistantId: string, history: UIMessage[]): Promise<void> => {
-      if (!session || workspace === null || (needsKey && !selectedKey)) {
+    async (assistantId: string, history: UIMessage[], keyOverride?: KeyView): Promise<void> => {
+      const key = keyOverride ?? selectedKey;
+      if (!session || workspace === null || (needsKey && !key)) {
         return;
       }
       const controller = new AbortController();
       abortRef.current = controller;
       setStreaming(true);
       const buffer = createAssistantBuffer(assistantId, setMessages);
+      // HACK-01: a tool that ran makes a retry unsafe (PV-08). Each turn starts clean.
+      const tracker = createToolRunTracker();
 
       let spent = 0;
       let pricingKnown = true;
       let inputTokens = 0;
       let outputTokens = 0;
-      let keyLabel = selectedKey?.label ?? "No key";
+      let keyLabel = key?.label ?? "No key";
       const { owner, repo } = githubTarget(connections);
 
       try {
@@ -261,7 +281,7 @@ export function useChatTurns(options: UseChatTurnsOptions) {
           callModel: async (outgoing, tools) => {
             const outcome = await sendChat({
               vault: session.vault,
-              ...(selectedKey ? { keyId: selectedKey.id } : {}),
+              ...(key ? { keyId: key.id } : {}),
               manifest,
               model: modelId.trim(),
               messages: outgoing,
@@ -271,7 +291,7 @@ export function useChatTurns(options: UseChatTurnsOptions) {
               ...(effectiveBaseUrl !== undefined ? { baseUrl: effectiveBaseUrl } : {}),
               bus,
               signal: controller.signal,
-              toolRan: true,
+              toolRan: tracker.ran,
               handlers: { onDelta: (text) => buffer.push(text) },
             });
             buffer.flush();
@@ -296,6 +316,7 @@ export function useChatTurns(options: UseChatTurnsOptions) {
           },
           onScene: (next) => patchMessage(setMessages, assistantId, (message) => ({ ...message, scene: next })),
           onEvent: (event) => {
+            tracker.note(event.status);
             patchMessage(setMessages, assistantId, (message) => {
               const tools = message.tools ?? [];
               const index = tools.findIndex((item) => item.id === event.id);
@@ -318,10 +339,23 @@ export function useChatTurns(options: UseChatTurnsOptions) {
           pricingKnown,
           inputTokens,
           outputTokens,
-          stopReason: result.hitLimit ? "limit" : "complete",
+          stopReason: result.aborted ? "aborted" : result.hitLimit ? "limit" : "complete",
         }));
       } catch (caught) {
         buffer.flush();
+        if (isCancelled(caught)) {
+          // PV-08: keep the text and the cost of the calls that already ran.
+          patchMessage(setMessages, assistantId, (message) => ({
+            ...message,
+            costUsd: spent,
+            pricingKnown,
+            inputTokens,
+            outputTokens,
+            keyLabel,
+            stopReason: "aborted",
+          }));
+          return;
+        }
         const error = safeError(caught);
         patchMessage(setMessages, assistantId, (message) => ({ ...message, error }));
       } finally {
@@ -330,7 +364,10 @@ export function useChatTurns(options: UseChatTurnsOptions) {
         approvalRef.current?.("deny");
         approvalRef.current = null;
         setApproval(null);
-        setKeys(session.vault.listKeys());
+        const nextKeys = keyViewsAfterTurn(session?.vault ?? null);
+        if (nextKeys !== null) {
+          setKeys(nextKeys);
+        }
         refreshFiles();
       }
     },
@@ -391,6 +428,7 @@ export function useChatTurns(options: UseChatTurnsOptions) {
         at,
         model: modelId,
         providerId,
+        mode: toolsReady ? "tools" : "chat",
         ...(selectedKey ? { keyLabel: selectedKey.label } : {}),
       };
       setMessages((current) => [...current, user, assistant]);
@@ -422,9 +460,14 @@ export function useChatTurns(options: UseChatTurnsOptions) {
           return { ...rest, content: "" };
         }),
       );
+      // BUG-03: a failed tool turn retries with the tools, not as a plain chat.
+      if (retryMode(message) === "tools") {
+        void runToolAssistant(message.id, history, keyOverride);
+        return;
+      }
       void runAssistant(message.id, history, keyOverride);
     },
-    [runAssistant, setMessages],
+    [runAssistant, runToolAssistant, setMessages],
   );
 
   const onErrorAction = useCallback(
@@ -471,10 +514,7 @@ export function useChatTurns(options: UseChatTurnsOptions) {
         if (index === -1) {
           return;
         }
-        const previous = messages
-          .slice(0, index)
-          .reverse()
-          .find((item) => item.role === "user");
+        const previous = messages.findLast((item, at) => at < index && item.role === "user");
         setMessages((current) =>
           current.filter((item) => item.id !== message.id && item.id !== previous?.id),
         );
@@ -540,6 +580,12 @@ export function useChatTurns(options: UseChatTurnsOptions) {
               pricingKnown: outcome.cost.pricingKnown,
               inputTokens: outcome.result.usage.inputTokens,
               outputTokens: outcome.result.usage.outputTokens,
+              ...(outcome.result.usage.cachedTokens !== undefined
+                ? { cachedTokens: outcome.result.usage.cachedTokens }
+                : {}),
+              ...(outcome.result.usage.cacheWriteTokens !== undefined
+                ? { cacheWriteTokens: outcome.result.usage.cacheWriteTokens }
+                : {}),
             };
           } catch (caught) {
             return {

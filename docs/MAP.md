@@ -6,6 +6,18 @@ search the repository.
 The rule for a new file: use the folder that names the role of the file. Do not
 add a new file to the top of a `src` folder.
 
+## Start here
+
+| You want | Open |
+|---|---|
+| The app entry and the routes | `apps/web/src/app/main.tsx`, `apps/web/src/app/Site.tsx` |
+| The `/app` workspace | `apps/web/src/app/WorkspaceScreen.tsx` |
+| One part of the workspace | `apps/web/src/app/workspace/` |
+| A saved browser record | `apps/web/src/stores/` |
+| A provider rule | `packages/providers/src/manifests/` |
+| The key vault | `packages/core/src/keys/vault.ts` |
+| The agent loop | `packages/core/src/agent/agent.ts` |
+
 ## The repository
 
 ```text
@@ -35,7 +47,8 @@ up a layer. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## The web app (apps/web/src)
 
-Each folder has one role. Each test file sits next to the file that it tests.
+Each folder has one role. Each web test file sits next to the file that it tests.
+The package tests live in `src/tests/`.
 
 ```text
 src/
@@ -57,7 +70,7 @@ src/
 | `Site.tsx` | The route host. It loads a page, keeps the workspace mounted and shows the scroll bar. |
 | `SiteChrome.tsx` | The shared header and footer of the public pages. |
 | `router.tsx` | The history router: the `Route` type, `useRoute`, `navigate` and `Link`. |
-| `WorkspaceScreen.tsx` | The `/app` workspace. It holds the state and the chat turns. |
+| `WorkspaceScreen.tsx` | The `/app` workspace. It connects the route, chat, spend and settings hooks. |
 
 ### app/workspace/
 
@@ -71,8 +84,13 @@ The workspace screen keeps each large part of its layout in one file here.
 | `Inspector.tsx` | The right column: the outbound facts, the files and the tool record. |
 | `SignedOutStage.tsx` | The stage before sign-in. |
 | `Dashboard.tsx` | The Home dashboard: quick start, recent chats, keys, arena, streak and the week cost. |
+| `UndoDeleteBar.tsx` | The short undo bar after a chat delete (AR-06). |
+| `useChatRoute.ts` | The provider, model, key and base URL choice, and the model list. |
+| `useChatThreads.ts` | The saved chats of the account: open, new, delete and undo. |
 | `useChatTurns.ts` | The chat turns: one answer, one agent turn and the arena run. |
-| `chatTurnHelpers.ts` | The error shape helper and the sent-text filter. |
+| `useSpendTracking.ts` | The spend of the day from the usage bus (CO-02, CO-04). |
+| `useUndoDelete.ts` | The timer and the record for the undo bar. |
+| `chatTurnHelpers.ts` | The error shape helper, the sent-text filter and the key read. |
 
 ### pages/
 
@@ -105,6 +123,7 @@ Each component shows one part of the workspace.
 | `RolesPanel.tsx` | The role list and the role assignment. |
 | `SceneView.tsx` | The three.js renderer for a `KeyrigScene`. It loads on demand. |
 | `KeyRigObject.tsx` | The three.js key rig in the landing hero. It loads on demand. |
+| `VaultScene.tsx` | The three.js vault scene on the Home page. It loads on demand. |
 | `Shelf.tsx` | The setup drawer with the keys, the profile and the roles. |
 | `BackendPanel.tsx` | The optional shared account: sign-up, sign-in, the role and the role list (D-07, Phase 3). |
 | `ToolStudio.tsx` | The local tool list, the form, the agent draft, the import and the test run. |
@@ -123,11 +142,11 @@ Each component shows one part of the workspace.
 ### stores/
 
 Each store saves one record in this browser. Each record has a schema version
-(AR-03). Each store has a test file next to it.
+(AR-03). Most stores have a test file next to them.
 
 | File | What it saves |
 |---|---|
-| `settings.ts` | The theme and the motion choice. It is also the `useSettings` hook. |
+| `settings.ts` | The theme, motion, density, budget, auto-lock and guard-prompt settings. It is also the `useSettings` hook. |
 | `toolSettings.ts` | The agent tool switches and the risk acknowledgement. |
 | `toolRegistry.ts` | The tool records of this device: the user tools and the copies of the built-in tools. |
 | `routeStore.ts` | The route: the provider, the model and the key for each mode. |
@@ -137,7 +156,7 @@ Each store saves one record in this browser. Each record has a schema version
 | `skills.ts` | The saved skills for the `/` shortcut. |
 | `threads.ts` | The saved chats. |
 | `workspace.ts` | The files of the browser workspace, with the path guard (AS-02). |
-| `spendStore.ts` | The spend of the current UTC day (CO-02). |
+| `spendStore.ts` | The spend of the last 31 UTC days and the price state (CO-02, PR-03). |
 | `featureRequests.ts` | The local copy of the feature requests and the votes (D-07, Phase 5). |
 
 ### services/
@@ -158,6 +177,7 @@ These files are pure helpers. They save nothing and they render nothing.
 
 | File | What it does |
 |---|---|
+| `autoLock.ts` | The idle and hidden-tab rules for the vault lock (B8 #4). |
 | `composerTokens.ts` | Parse `@` and `/` in the composer and add a file to the prompt (CX-04). |
 | `dashboard.ts` | The pure parts of the Home dashboard: the recent chats, the arena runs and the week cost (CO-02, UX-01). |
 | `marketplace.ts` | The published tool to a definition and the install check (PR-01, MC-05). |
@@ -171,7 +191,13 @@ These files are pure helpers. They save nothing and they render nothing.
 | `receipt.ts` | The totals of a thread and its SVG receipt card. |
 | `storage.ts` | Check `localStorage` and fall back to memory storage. |
 | `trimMessages.ts` | Drop the oldest exchanges of a long chat and keep the failed turn (ER-04). |
+| `turnRetry.ts` | The retry mode and the tool-run record of one turn (PV-08, PV-09). |
 | `types.ts` | The `UIMessage` and `ArenaResult` types and `newId`. |
+| `vaultScene.ts` | The pure layout and animation values for the vault scene. |
+
+`csp.test.ts` and `offline.test.ts` are checks of the build files. They have no
+source file next to them: they read `index.html`, `public/_headers`,
+`vercel.json` and `public/sw.js`.
 
 ### styles/
 
@@ -192,17 +218,18 @@ package.
 |---|---|
 | `backend.ts` | The four fields of a request to the backend and the one request shape (D-07, PR-01, PR-05). |
 | `errors.ts` | The error categories, the remediation actions and the error shape (ER-01, ER-02). |
+| `fetch.ts` | The bound `fetch` helper, so a call keeps the window receiver. |
 | `id.ts` | One random id, with a fallback for a browser without `crypto.randomUUID`. |
 | `publish.ts` | The publish scan that rejects an item holding a key (PR-01). |
-| `redact.ts` | The one redaction function for a key (KS-03). |
+| `redact.ts` | The key redaction, the deep redaction and the safe last-four mask (KS-03, KS-04). |
 | `schema.ts` | The versioned document and the migration step (AR-03). |
-| `storage.ts` | The `StorageLike` type and the memory storage fallback. |
+| `storage.ts` | The `StorageLike` type, the memory storage fallback and the versioned document read and write. |
 
 ### packages/providers
 
 | File | What it does |
 |---|---|
-| `manifests/manifest.ts` | The manifest types: auth type, wire format and reasoning format. |
+| `manifests/manifest.ts` | The manifest types and the custom base URL check (KS-07). |
 | `manifests/builtins.ts` | The six built-in provider manifests (PV-02). |
 | `manifests/rules.ts` | The named rules that turn an intent into a wire plan (PV-03). |
 | `catalog/catalog.ts` | The model catalog reader and cache (PV-01). |
@@ -255,7 +282,7 @@ package.
 | A saved record in the browser | `apps/web/src/stores/` | Add a schema version and a test file |
 | A call to a server or an API | `apps/web/src/services/` | Nothing |
 | A pure helper | `apps/web/src/lib/` | Add a test file next to it |
-| A provider | `packages/providers/src/builtins.ts` | Add one adapter if the wire format is new |
+| A provider | `packages/providers/src/manifests/builtins.ts` | Add one adapter if the wire format is new |
 | A tool | `packages/core/src/agent/toolDefinition.ts` | `toolCatalog.ts` and the test |
 | A rule for every layer | `packages/shared/src/` | Nothing |
 | A check of the repository | `tools/` | `package.json` |
@@ -264,7 +291,7 @@ package.
 
 | Path | What it holds |
 |---|---|
-| `e2e/` | The Playwright specs: the smoke test, the account flow, the connectors and the vault transfer. |
+| `e2e/` | The Playwright specs: smoke, pages, errors, offline, accounts, connectors, vault transfer, vault scene, auto-lock, two-tab and worker-network. |
 | `sites-preview/` | The Worker for the Freebuff Sites preview: the static host, the hosted model and the optional backend (`backend.mjs`). |
 | `tools/check-layers.mjs` | The layer check (AR-01). |
 | `tools/fake-provider.mjs` | The local provider for a test with no key. Port 8788. |

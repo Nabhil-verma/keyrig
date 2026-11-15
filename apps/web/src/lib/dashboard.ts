@@ -32,13 +32,17 @@ export interface ArenaRunCard {
   at: string;
   models: string[];
   costUsd: number;
+  /** PR-03: false when any result of the run has no price. */
+  pricingKnown: boolean;
 }
 
 export interface WeekCost {
   /** The total of the last seven UTC days, oldest first. */
   totalUsd: number;
   days: SpendDay[];
-  /** The estimated share that has a price. Always true for a stored cost. */
+  /** PR-03: false when any day of the week holds a request with no price. */
+  pricingKnown: boolean;
+  /** The card marks the total as estimated, because a price can change. */
   estimated: true;
 }
 
@@ -98,6 +102,7 @@ export function arenaRuns(threads: readonly StoredThread[], limit = 3): ArenaRun
       at: thread.arena.at,
       models: thread.arena.results.map((result) => result.model),
       costUsd: thread.arena.results.reduce((sum, result) => sum + result.costUsd, 0),
+      pricingKnown: thread.arena.results.every((result) => result.pricingKnown),
     });
   }
   return runs.sort((left, right) => (left.at < right.at ? 1 : -1)).slice(0, limit);
@@ -113,10 +118,18 @@ export function weekCost(days: readonly SpendDay[], now: Date = new Date()): Wee
     const day = new Date(now.getTime() - index * 86_400_000);
     wanted.push(dayKey(day));
   }
-  const byDay = new Map(days.map((entry) => [entry.day, entry.usd]));
-  const week = wanted.map((day) => ({ day, usd: byDay.get(day) ?? 0 }));
+  const byDay = new Map(days.map((entry) => [entry.day, entry]));
+  const week = wanted.map((day) => {
+    const entry = byDay.get(day);
+    return { day, usd: entry?.usd ?? 0, pricingKnown: entry?.pricingKnown ?? true };
+  });
   const total = week.reduce((sum, entry) => sum + entry.usd, 0);
-  return { totalUsd: Math.round(total * 10_000) / 10_000, days: week, estimated: true };
+  return {
+    totalUsd: Math.round(total * 10_000) / 10_000,
+    days: week,
+    pricingKnown: week.every((entry) => entry.pricingKnown),
+    estimated: true,
+  };
 }
 
 /**
